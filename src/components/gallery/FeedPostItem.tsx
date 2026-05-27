@@ -10,7 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import UserProfileModal from "@/components/shared/UserProfileModal";
 import ShareDialog from "@/components/shared/ShareDialog";
 import { isAdminUser } from "@/lib/admin";
-import { getTrackById } from "@/lib/music";
+
 
 const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) => {
   const { toast } = useToast();
@@ -44,6 +44,8 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
   const feedVideoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const postRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = carouselRef.current;
@@ -51,31 +53,49 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
     el.scrollTo({ left: currentImageIndex * el.offsetWidth, behavior: "smooth" });
   }, [currentImageIndex]);
 
-  // Video playback
+  // Handle Play/Pause and Mute based on state
   useEffect(() => {
-    if (item.media_type === "video" && feedVideoRef.current) {
-      feedVideoRef.current.muted = videoMuted; 
-      if (videoPlaying) {
-        feedVideoRef.current.play().catch(() => {});
-      } else {
-        feedVideoRef.current.pause();
-      }
-    }
-  }, [videoPlaying, videoMuted, item.media_type]);
-
-  // Audio playback for non-video posts
-  useEffect(() => {
-    if (item.media_type !== "video" && audioRef.current) {
+    if (item.media_type === "image" && item.music_url && audioRef.current) {
       audioRef.current.muted = videoMuted;
-      if (videoPlaying && !videoMuted) {
+      if (videoPlaying) {
         audioRef.current.play().catch(() => {});
       } else {
         audioRef.current.pause();
       }
     }
+  }, [videoPlaying, videoMuted, item.media_type, item.music_url]);
+
+  useEffect(() => {
+    if (item.media_type !== "video" || !feedVideoRef.current) return;
+    feedVideoRef.current.muted = videoMuted;
+    if (videoPlaying) {
+      feedVideoRef.current.play().catch(() => {});
+    } else {
+      feedVideoRef.current.pause();
+    }
   }, [videoPlaying, videoMuted, item.media_type]);
 
+  // IntersectionObserver for auto-playback when post is visible
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          setVideoPlaying(entry.isIntersecting);
+        });
+      },
+      { threshold: 0.6 }
+    );
+
+    const currentPost = postRef.current;
+    if (currentPost) observer.observe(currentPost);
+
+    return () => {
+      if (currentPost) observer.unobserve(currentPost);
+    };
+  }, []);
+
   const togglePlayPause = () => {
+    if (!feedVideoRef.current && !audioRef.current) return;
     const isPlaying = !videoPlaying;
     setVideoPlaying(isPlaying);
     setShowPlayIndicator(isPlaying ? "play" : "pause");
@@ -84,10 +104,7 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
 
   const getAudioSource = () => {
     if (!item.music_url) return undefined;
-    const track = getTrackById(item.music_url);
-    if (track) return track.previewUrl || (track as any).audioUrl;
-    if (item.music_url.startsWith("http") || item.music_url.startsWith("data:") || item.music_url.startsWith("blob:")) return item.music_url;
-    return undefined; 
+    return item.music_url; 
   };
 
   useEffect(() => {
@@ -413,7 +430,7 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
       {modalUserId && (
         <UserProfileModal userId={modalUserId} onClose={() => setModalUserId(null)} />
       )}
-      <div className="feed-post-card post-card mb-0 flex flex-col bg-background relative group bw-hover-gradient border-none overflow-hidden rounded-xl md:rounded-xl">
+      <div ref={postRef} className="bg-card w-full mb-6 relative hover:shadow-xl transition-shadow duration-300 animate-fade-in group border-b border-border/10 sm:border-b-0 sm:rounded-2xl pb-4">
         <div className="post-header-mobile flex items-center justify-between px-5 py-4">
           <div className="flex items-center gap-3.5">
             <Avatar

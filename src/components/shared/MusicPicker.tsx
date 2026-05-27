@@ -1,66 +1,116 @@
 /**
- * MusicPicker ΓÇö Instagram-style music selector for posts.
- * Search curated tracks, preview them, and attach to post.
+ * MusicPicker — Instagram-style music selector for posts.
+ * Integrates iTunes Search API and custom local file uploads.
  */
 import { useState, useRef, useEffect } from "react";
-import { Music2, Search, Play, Pause, X, Check, ChevronDown, ChevronUp } from "lucide-react";
-
-import { Track, TRACKS } from "@/lib/music";
-
-const GENRES = ["All", "Pop", "Hip-Hop", "R&B", "Indie", "Pop Punk", "Afrobeats"];
+import { Music2, Search, Play, Pause, X, Check, ChevronDown, ChevronUp, Upload, Loader2 } from "lucide-react";
+import { Track, formatDuration } from "@/lib/music";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "@/components/ui/use-toast";
 
 interface MusicPickerProps {
   selected: Track | null;
   onSelect: (track: Track | null) => void;
 }
 
-// Waveform bars animation component
-function WaveformBars({ playing, color }: { playing: boolean; color: string }) {
-  return (
-    <div className="flex items-end gap-[2px] h-4">
-      {[3, 5, 4, 6, 3, 5, 4, 3, 6, 4, 5, 3].map((h, i) => (
-        <div
-          key={i}
-          style={{
-            width: 2,
-            height: playing ? `${h * (Math.random() * 0.4 + 0.8)}px` : `${h * 0.5}px`,
-            backgroundColor: color,
-            borderRadius: 1,
-            transition: playing ? `height ${0.15 + i * 0.03}s ease-in-out` : "height 0.3s ease",
-            animation: playing ? `wave-bar-${(i % 3) + 1} ${0.6 + i * 0.05}s ease-in-out infinite alternate` : "none",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
 export default function MusicPicker({ selected, onSelect }: MusicPickerProps) {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [genre, setGenre] = useState("All");
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  
   const [playingId, setPlayingId] = useState<string | null>(null);
-  const [tick, setTick] = useState(0); // force re-render for waveform
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Waveform animation ticker
+  // Search iTunes API
   useEffect(() => {
-    if (!playingId) return;
-    const id = setInterval(() => setTick(t => t + 1), 150);
-    return () => clearInterval(id);
-  }, [playingId]);
+    const searchTracks = async () => {
+      if (!query.trim()) {
+        setTracks([]);
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=20`);
+        const data = await res.json();
+        
+        const results: Track[] = data.results.map((t: any) => ({
+          id: t.trackId.toString(),
+          title: t.trackName,
+          artist: t.artistName,
+          genre: t.primaryGenreName,
+          duration: formatDuration(t.trackTimeMillis || 0),
+          previewUrl: t.previewUrl,
+          coverUrl: t.artworkUrl100,
+          coverColor: "#" + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0') // fallback color
+        })).filter((t: Track) => t.previewUrl); // only keep tracks with audio previews
 
-  // Simulate audio preview with Web Audio API
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const oscRef = useRef<OscillatorNode | null>(null);
-  const gainRef = useRef<GainNode | null>(null);
+        setTracks(results);
+      } catch (err) {
+        console.error("iTunes search failed", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const debounce = setTimeout(searchTracks, 500);
+    return () => clearTimeout(debounce);
+  }, [query]);
+
+  // Handle custom upload
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    
+    if (!file.type.startsWith('audio/')) {
+      toast({ title: "Invalid file", description: "Please upload an audio file (MP3/WAV)", variant: "destructive" });
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const ext = file.name.split('.').pop() || 'mp3';
+      const path = `custom-music/${user.id}/${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("post-images")
+        .upload(path, file, { contentType: file.type });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from("post-images").getPublicUrl(path);
+      const publicUrl = data.publicUrl;
+
+      // Create a track object for it
+      const customTrack: Track = {
+        id: `custom_${Date.now()}`,
+        title: file.name.replace(`.${ext}`, ''),
+        artist: "Custom Audio",
+        genre: "Custom",
+        duration: "Unknown", // we could calculate via audio element but skipping for simplicity
+        previewUrl: publicUrl,
+        coverColor: "#8b5cf6"
+      };
+
+      onSelect(customTrack);
+      setOpen(false);
+      toast({ title: "Music uploaded!", description: "Your custom audio is attached." });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const stopPreview = () => {
-    if (oscRef.current) {
-      try {
-        gainRef.current?.gain.setTargetAtTime(0, audioCtxRef.current!.currentTime, 0.1);
-        setTimeout(() => { try { oscRef.current?.stop(); } catch {} }, 200);
-      } catch {}
-      oscRef.current = null;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
     }
     setPlayingId(null);
   };
@@ -72,54 +122,15 @@ export default function MusicPicker({ selected, onSelect }: MusicPickerProps) {
     }
     stopPreview();
 
-    try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      audioCtxRef.current = ctx;
-
-      const gain = ctx.createGain();
-      gain.gain.value = 0;
-      gain.connect(ctx.destination);
-      gainRef.current = gain;
-
-      // Create a pleasant melody using multiple oscillators
-      const notes = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00];
-      const baseFreq = notes[parseInt(track.id) % notes.length];
-
-      const osc = ctx.createOscillator();
-      osc.type = "sine";
-      osc.frequency.value = baseFreq;
-      osc.connect(gain);
-      osc.start();
-      oscRef.current = osc;
-
-      // Fade in
-      gain.gain.setTargetAtTime(0.15, ctx.currentTime, 0.1);
-
-      // Gentle frequency modulation for musicality
-      let time = ctx.currentTime;
-      notes.forEach((freq, i) => {
-        osc.frequency.setValueAtTime(freq, time + i * 0.5);
-      });
-
-      setPlayingId(track.id);
-
-      // Auto-stop after 8 seconds
-      setTimeout(() => {
-        if (oscRef.current === osc) stopPreview();
-      }, 8000);
-    } catch (e) {
-      console.warn("Audio preview failed:", e);
-    }
+    const audio = new Audio(track.previewUrl);
+    audio.play().catch(e => console.error("Audio playback error", e));
+    
+    audio.onended = () => setPlayingId(null);
+    audioRef.current = audio;
+    setPlayingId(track.id);
   };
 
   useEffect(() => () => stopPreview(), []);
-
-  const filtered = TRACKS.filter(t => {
-    const q = query.toLowerCase();
-    const matchSearch = !q || t.title.toLowerCase().includes(q) || t.artist.toLowerCase().includes(q);
-    const matchGenre = genre === "All" || t.genre === genre;
-    return matchSearch && matchGenre;
-  });
 
   const handleSelect = (track: Track) => {
     stopPreview();
@@ -128,8 +139,7 @@ export default function MusicPicker({ selected, onSelect }: MusicPickerProps) {
   };
 
   return (
-    <div className="music-picker">
-      {/* Trigger button */}
+    <div className="music-picker relative">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -138,21 +148,21 @@ export default function MusicPicker({ selected, onSelect }: MusicPickerProps) {
         <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${selected ? "bg-primary" : "bg-secondary"} transition-colors`}>
           <Music2 className={`w-4 h-4 ${selected ? "text-primary-foreground" : "text-muted-foreground"}`} />
         </div>
-        <div className="flex-1 text-left">
+        <div className="flex-1 text-left truncate">
           {selected ? (
             <div>
-              <p className="text-sm font-semibold text-foreground leading-tight">{selected.title}</p>
-              <p className="text-xs text-muted-foreground">{selected.artist}</p>
+              <p className="text-sm font-semibold text-foreground truncate">{selected.title}</p>
+              <p className="text-xs text-muted-foreground truncate">{selected.artist}</p>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Add music</p>
+            <p className="text-sm text-muted-foreground">Add music (iTunes & Custom)</p>
           )}
         </div>
         <div className="flex items-center gap-1">
           {selected && (
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); onSelect(null); }}
+              onClick={(e) => { e.stopPropagation(); stopPreview(); onSelect(null); }}
               className="p-1 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
             >
               <X className="w-3.5 h-3.5" />
@@ -162,50 +172,52 @@ export default function MusicPicker({ selected, onSelect }: MusicPickerProps) {
         </div>
       </button>
 
-      {/* Dropdown panel */}
       {open && (
-        <div className="mt-2 rounded-2xl border border-border/50 bg-card shadow-xl overflow-hidden animate-fade-in">
-          {/* Search bar */}
+        <div className="absolute z-[100] mt-2 w-full rounded-2xl border border-border/50 bg-card shadow-2xl overflow-hidden animate-fade-in">
+          {/* Custom Upload Button */}
+          <div className="p-2 border-b border-border/30 bg-secondary/20">
+            <button
+              type="button"
+              disabled={isUploading}
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-primary/10 hover:bg-primary/20 text-primary rounded-lg transition-colors"
+            >
+              {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              {isUploading ? "Uploading..." : "Import from Computer"}
+            </button>
+            <input 
+              type="file" 
+              accept="audio/*" 
+              className="hidden" 
+              ref={fileInputRef} 
+              onChange={handleFileUpload} 
+            />
+          </div>
+
           <div className="p-3 border-b border-border/30">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search songs or artists..."
+                placeholder="Search iTunes database..."
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 rounded-lg bg-secondary/60 border-none outline-none text-sm text-foreground placeholder:text-muted-foreground focus:ring-1 focus:ring-primary/30"
-                autoFocus
               />
             </div>
           </div>
 
-          {/* Genre filter pills */}
-          <div className="flex gap-1.5 px-3 py-2 overflow-x-auto scrollbar-none border-b border-border/20">
-            {GENRES.map(g => (
-              <button
-                key={g}
-                type="button"
-                onClick={() => setGenre(g)}
-                className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                  genre === g
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary/60 text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {g}
-              </button>
-            ))}
-          </div>
-
-          {/* Track list */}
           <div className="max-h-64 overflow-y-auto">
-            {filtered.length === 0 ? (
+            {isLoading ? (
+              <div className="py-8 flex justify-center">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : tracks.length === 0 ? (
               <div className="py-8 text-center text-sm text-muted-foreground">
-                No songs found
+                {query ? "No songs found" : "Type to search..."}
               </div>
             ) : (
-              filtered.map(track => {
+              tracks.map(track => {
                 const isPlaying = playingId === track.id;
                 const isSelected = selected?.id === track.id;
 
@@ -217,61 +229,40 @@ export default function MusicPicker({ selected, onSelect }: MusicPickerProps) {
                       isSelected ? "bg-primary/5 border-l-2 border-primary" : ""
                     }`}
                   >
-                    {/* Album cover */}
                     <div
-                      className="relative w-10 h-10 rounded-lg flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-sm overflow-hidden"
-                      style={{ background: `linear-gradient(135deg, ${track.coverColor}cc, ${track.coverColor})` }}
+                      className="relative w-10 h-10 rounded-lg flex-shrink-0 bg-secondary flex items-center justify-center overflow-hidden"
+                      style={{ backgroundColor: track.coverColor }}
                     >
-                      <Music2 className="w-4 h-4 opacity-60" />
-                      {/* Play overlay */}
+                      {track.coverUrl ? (
+                        <img src={track.coverUrl} alt={track.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <Music2 className="w-4 h-4 text-white opacity-60" />
+                      )}
                       <button
                         type="button"
                         onClick={e => { e.stopPropagation(); togglePreview(track); }}
-                        className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 hover:opacity-100 transition-opacity rounded-lg"
+                        className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 hover:opacity-100 transition-opacity"
                       >
                         {isPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white" />}
                       </button>
                     </div>
 
-                    {/* Track info */}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate leading-tight">{track.title}</p>
-                      <div className="flex items-center gap-2">
-                        <p className="text-xs text-muted-foreground truncate">{track.artist}</p>
-                        {isPlaying && (
-                          <div className="flex items-end gap-[2px] h-3">
-                            {[2, 4, 3, 5, 2, 4].map((_, i) => (
-                              <div
-                                key={i}
-                                style={{
-                                  width: 2,
-                                  backgroundColor: track.coverColor,
-                                  borderRadius: 1,
-                                  height: `${(tick + i) % 2 === 0 ? 8 : 4}px`,
-                                  transition: "height 0.15s ease",
-                                }}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{track.artist}</p>
                     </div>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span className="text-xs text-muted-foreground">{track.duration}</span>
-                      {/* Play button */}
                       <button
                         type="button"
                         onClick={e => { e.stopPropagation(); togglePreview(track); }}
                         className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
-                          isPlaying
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-secondary/80 text-muted-foreground hover:text-foreground hover:bg-secondary"
+                          isPlaying ? "bg-primary text-primary-foreground" : "bg-secondary/80 hover:bg-secondary"
                         }`}
                       >
                         {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
                       </button>
-                      {/* Check mark for selected */}
                       {isSelected && (
                         <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center">
                           <Check className="w-3 h-3 text-primary-foreground" />
@@ -282,18 +273,6 @@ export default function MusicPicker({ selected, onSelect }: MusicPickerProps) {
                 );
               })
             )}
-          </div>
-
-          {/* Footer */}
-          <div className="px-3 py-2 border-t border-border/20 bg-secondary/10 flex justify-between items-center">
-            <span className="text-xs text-muted-foreground">{filtered.length} tracks</span>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="text-xs text-primary font-medium hover:underline"
-            >
-              Done
-            </button>
           </div>
         </div>
       )}

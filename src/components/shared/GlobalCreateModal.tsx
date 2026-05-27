@@ -177,7 +177,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
           turn_off_commenting: turnOffCommenting,
           alt_text: altText.trim() || null,
           music_title: musicTitle.trim() || null,
-          music_url: selectedMusic?.id || null,
+          music_url: selectedMusic?.previewUrl || null,
         });
       } else if (selectedFiles.length === 1) {
         const file = selectedFiles[0];
@@ -194,7 +194,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
           turn_off_commenting: turnOffCommenting,
           alt_text: altText.trim() || null,
           music_title: musicTitle.trim() || null,
-          music_url: selectedMusic?.id || null,
+          music_url: selectedMusic?.previewUrl || null,
         });
       } else {
         const urls: string[] = [];
@@ -213,7 +213,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
           turn_off_commenting: turnOffCommenting,
           alt_text: altText.trim() || null,
           music_title: musicTitle.trim() || null,
-          music_url: selectedMusic?.id || null,
+          music_url: selectedMusic?.previewUrl || null,
         });
       }
 
@@ -327,7 +327,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                           <img
                             src={previewUrls[currentSlide]}
                             alt={`Preview ${currentSlide + 1}`}
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-contain bg-black"
                           />
                           <div className="absolute top-3 right-3 bg-black/60 text-white text-xs font-bold px-2 py-1 rounded-full backdrop-blur-sm">
                             {currentSlide + 1}/{previewUrls.length}
@@ -365,13 +365,13 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                           <video
                             src={primaryPreviewUrl}
                             controls
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-contain bg-black"
                           />
                         ) : (
                           <img
                             src={primaryPreviewUrl}
                             alt="Preview"
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-contain bg-black"
                           />
                         )}
 

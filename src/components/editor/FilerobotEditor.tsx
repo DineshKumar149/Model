@@ -71,6 +71,16 @@ export default function FilerobotEditor({
         defaultToolId={TOOLS.CROP}
         savingPixelRatio={4}
         previewPixelRatio={Math.max(1, window.devicePixelRatio || 1)}
+        translations={{
+          profile: 'Profile',
+          coverPhoto: 'Cover photo',
+          custom: 'Custom',
+          save: 'Next',
+          saveAs: 'Next',
+          export: 'Next'
+        }}
+        defaultSavedImageType="png"
+        useBackendTranslations={false}
       />
     </div>
   );
