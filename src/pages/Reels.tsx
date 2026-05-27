@@ -1001,6 +1001,19 @@ export default function Reels() {
   useEffect(() => {
     const fetchReels = async () => {
       try {
+        const { data: follows } = await supabase
+          .from("user_follows")
+          .select("following_id")
+          .eq("follower_id", user?.id || "")
+          .eq("status", "following");
+        const followingIds = follows ? follows.map(f => f.following_id) : [];
+
+        const { data: blocks } = await supabase
+          .from("user_blocks")
+          .select("blocker_id, blocked_id")
+          .or(`blocker_id.eq.${user?.id || ""},blocked_id.eq.${user?.id || ""}`);
+        const blockedIds = blocks ? blocks.map(b => b.blocker_id === user?.id ? b.blocked_id : b.blocker_id) : [];
+
         const { data: posts, error } = await supabase
           .from("posts")
           .select("*")
@@ -1013,15 +1026,25 @@ export default function Reels() {
           const authorIds = Array.from(new Set(posts.map((p) => p.user_id)));
           const { data: profiles } = await supabase
             .from("profiles")
-            .select("user_id, display_name, username, avatar_url, created_at")
+            .select("user_id, display_name, username, avatar_url, created_at, is_private")
             .in("user_id", authorIds);
 
           const profileMap = new Map(
             (profiles || []).map((p) => [p.user_id, p as Profile])
           );
 
+          const visiblePosts = posts.filter(post => {
+            if (blockedIds.includes(post.user_id)) return false;
+            if (post.user_id === user?.id) return true;
+            const profile = profileMap.get(post.user_id);
+            if (profile?.is_private) {
+              return followingIds.includes(post.user_id);
+            }
+            return true;
+          });
+
           setReels(
-            posts.map((post) => ({
+            visiblePosts.map((post) => ({
               ...post,
               authorProfile: profileMap.get(post.user_id) || null,
             }))

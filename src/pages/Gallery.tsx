@@ -36,13 +36,34 @@ const Gallery = () => {
     const fetchFeed = async () => {
       setIsLoading(true);
       
+      const { data: follows } = await supabase
+        .from("user_follows")
+        .select("following_id")
+        .eq("follower_id", user.id)
+        .eq("status", "following");
+      const followingIds = follows ? follows.map(f => f.following_id) : [];
+
+      const { data: blocks } = await supabase
+        .from("user_blocks")
+        .select("blocker_id, blocked_id")
+        .or(`blocker_id.eq.${user.id},blocked_id.eq.${user.id}`);
+      const blockedIds = blocks ? blocks.map(b => b.blocker_id === user.id ? b.blocked_id : b.blocker_id) : [];
+
       const { data, error } = await supabase
         .from("posts")
         .select(`*, profiles(display_name, avatar_url, username, is_private), post_likes(user_id), post_comments(id)`)
         .order("created_at", { ascending: false });
 
       if (!error && data) {
-        setMedia(data);
+        const visibleMedia = data.filter(item => {
+           if (blockedIds.includes(item.user_id)) return false;
+           if (item.user_id === user.id) return true;
+           if (item.profiles?.is_private) {
+              return followingIds.includes(item.user_id);
+           }
+           return true;
+        });
+        setMedia(visibleMedia);
       }
       setIsLoading(false);
     };

@@ -86,6 +86,12 @@ const FollowersModal = ({ profileId, mode, onClose }: FollowersModalProps) => {
     }
   };
 
+  const handleRemoveFollower = async (followerId: string) => {
+    if (!user) return;
+    await supabase.from("user_follows").delete().eq("follower_id", followerId).eq("following_id", user.id);
+    setUsers((prev) => prev.filter(p => p.user_id !== followerId));
+  };
+
   return (
     <div className="fixed inset-0 z-[350] flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
@@ -136,20 +142,30 @@ const FollowersModal = ({ profileId, mode, onClose }: FollowersModalProps) => {
                     </div>
 
                     {!isSelf && user && (
-                      <button
-                        onClick={() => handleToggleFollow(profile.user_id, !!profile.is_private)}
-                        className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                          isFollowingOrRequested
-                            ? "border border-border/60 text-foreground bg-transparent hover:bg-secondary/40"
-                            : "bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 shadow-sm"
-                        }`}
-                      >
-                        {currentStatus === "following"
-                          ? "Following"
-                          : currentStatus === "pending"
-                            ? "Requested"
-                            : "Follow"}
-                      </button>
+                      <div className="flex gap-2">
+                        {mode === "followers" && profileId === user.id && (
+                          <button
+                            onClick={() => handleRemoveFollower(profile.user_id)}
+                            className="px-4 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 border border-border/60 text-foreground bg-transparent hover:bg-secondary/40"
+                          >
+                            Remove
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleToggleFollow(profile.user_id, !!profile.is_private)}
+                          className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                            isFollowingOrRequested
+                              ? "border border-border/60 text-foreground bg-transparent hover:bg-secondary/40"
+                              : "bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:from-indigo-600 hover:to-purple-700 shadow-sm"
+                          }`}
+                        >
+                          {currentStatus === "following"
+                            ? "Following"
+                            : currentStatus === "pending"
+                              ? "Requested"
+                              : "Follow"}
+                        </button>
+                      </div>
                     )}
                   </div>
                 );

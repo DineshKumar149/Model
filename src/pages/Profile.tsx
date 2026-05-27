@@ -271,7 +271,13 @@ const Profile = () => {
       if (!error) { setHasBlockedTarget(false); toast({ title: "User unblocked" }); }
     } else {
       const { error } = await supabase.from("user_blocks").insert({ blocker_id: user.id, blocked_id: profileId });
-      if (!error) { setHasBlockedTarget(true); setFollowStatus("none"); toast({ title: "User blocked" }); }
+      if (!error) { 
+        setHasBlockedTarget(true); 
+        setFollowStatus("none"); 
+        await supabase.from("user_follows").delete().eq("follower_id", user.id).eq("following_id", profileId);
+        await supabase.from("user_follows").delete().eq("follower_id", profileId).eq("following_id", user.id);
+        toast({ title: "User blocked" }); 
+      }
     }
   };
 
@@ -534,11 +540,17 @@ const Profile = () => {
                   <span className="font-extrabold text-foreground text-2xl font-display">{postsCount}</span>
                   <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase mt-1">Posts</span>
                 </div>
-                <button className="flex flex-col items-center hover:opacity-80 transition-opacity" onClick={() => setShowFollowersModal("followers")}>
+                <button 
+                  className={`flex flex-col items-center transition-opacity ${(!isOwnProfile && profileData?.is_private && followStatus !== "following") ? "opacity-50 pointer-events-none" : "hover:opacity-80"}`} 
+                  onClick={() => setShowFollowersModal("followers")}
+                >
                   <span className="font-extrabold text-foreground text-2xl font-display">{followersCount}</span>
                   <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase mt-1">Followers</span>
                 </button>
-                <button className="flex flex-col items-center hover:opacity-80 transition-opacity" onClick={() => setShowFollowersModal("following")}>
+                <button 
+                  className={`flex flex-col items-center transition-opacity ${(!isOwnProfile && profileData?.is_private && followStatus !== "following") ? "opacity-50 pointer-events-none" : "hover:opacity-80"}`} 
+                  onClick={() => setShowFollowersModal("following")}
+                >
                   <span className="font-extrabold text-foreground text-2xl font-display">{followingCount}</span>
                   <span className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase mt-1">Following</span>
                 </button>
@@ -655,11 +667,17 @@ const Profile = () => {
                 <span className="font-extrabold text-foreground text-xl font-display">{postsCount}</span>
                 <span className="text-muted-foreground text-[10px] font-bold tracking-wider uppercase mt-1">Posts</span>
               </div>
-              <button className="flex flex-col items-center" onClick={() => setShowFollowersModal("followers")}>
+              <button 
+                className={`flex flex-col items-center ${(!isOwnProfile && profileData?.is_private && followStatus !== "following") ? "opacity-50 pointer-events-none" : ""}`} 
+                onClick={() => setShowFollowersModal("followers")}
+              >
                 <span className="font-extrabold text-foreground text-xl font-display">{followersCount}</span>
                 <span className="text-muted-foreground text-[10px] font-bold tracking-wider uppercase mt-1">Followers</span>
               </button>
-              <button className="flex flex-col items-center" onClick={() => setShowFollowersModal("following")}>
+              <button 
+                className={`flex flex-col items-center ${(!isOwnProfile && profileData?.is_private && followStatus !== "following") ? "opacity-50 pointer-events-none" : ""}`} 
+                onClick={() => setShowFollowersModal("following")}
+              >
                 <span className="font-extrabold text-foreground text-xl font-display">{followingCount}</span>
                 <span className="text-muted-foreground text-[10px] font-bold tracking-wider uppercase mt-1">Following</span>
               </button>

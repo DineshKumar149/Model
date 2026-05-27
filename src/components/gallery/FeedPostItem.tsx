@@ -99,8 +99,45 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
     const currentPost = postRef.current;
     if (currentPost) observer.observe(currentPost);
 
+    // Mute when user switches tabs
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        setVideoMuted(true);
+        setVideoPlaying(false);
+      } else {
+        if (currentPost) {
+           const rect = currentPost.getBoundingClientRect();
+           if (rect.top < window.innerHeight && rect.bottom > 0) {
+              setVideoPlaying(true);
+              setVideoMuted(false);
+           }
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Mute when Shadcn or any other modal opens (adds data-scroll-locked to body)
+    const bodyObserver = new MutationObserver(() => {
+       const isLocked = document.body.hasAttribute("data-scroll-locked") || document.body.style.pointerEvents === "none";
+       if (isLocked) {
+         setVideoMuted(true);
+         setVideoPlaying(false);
+       } else {
+         if (document.visibilityState === "visible" && currentPost) {
+           const rect = currentPost.getBoundingClientRect();
+           if (rect.top < window.innerHeight && rect.bottom > 0) {
+              setVideoPlaying(true);
+              setVideoMuted(false);
+           }
+         }
+       }
+    });
+    bodyObserver.observe(document.body, { attributes: true, attributeFilter: ["data-scroll-locked", "style"] });
+
     return () => {
       if (currentPost) observer.unobserve(currentPost);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      bodyObserver.disconnect();
     };
   }, []);
 
@@ -507,7 +544,7 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
               <video
                 ref={feedVideoRef}
                 src={item.image_url}
-                className="w-full h-auto object-cover max-h-[700px]"
+                className="w-full h-auto object-contain max-h-[85vh] bg-black/5"
                 loop
                 playsInline
                 autoPlay
@@ -564,7 +601,7 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
                       src={src}
                       alt={`Photo ${idx + 1}`}
                       draggable={false}
-                      className="w-full h-auto object-cover max-h-[700px] select-none cursor-pointer"
+                      className="w-full h-auto object-contain max-h-[85vh] bg-black/5 select-none cursor-pointer"
                     />
                   </div>
                 ))}
@@ -623,7 +660,7 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
                 src={item.image_url}
                 alt="Post"
                 onDoubleClick={handleLike}
-                className="w-full h-auto object-cover max-h-[700px] transition-transform duration-700 group-hover:scale-[1.01]"
+                className="w-full h-auto object-contain max-h-[85vh] bg-black/5 transition-transform duration-700 group-hover:scale-[1.01]"
               />
               {item.music_url && (
                 <button
