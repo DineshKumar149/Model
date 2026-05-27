@@ -102,11 +102,12 @@ export default function CustomEditor({
       
       if (mediaType === 'image') {
         if (selectedMusic) {
-          let execArgs = ['-loop', '1', '-i', inputMediaName, '-i', 'audio.mp3', '-c:v', 'libx264', '-c:a', 'aac', '-b:a', '192k'];
+          let execArgs = ['-loop', '1', '-framerate', '30', '-i', inputMediaName, '-i', 'audio.mp3', '-c:v', 'libx264', '-c:a', 'aac', '-b:a', '192k'];
+          const scaleFilter = 'scale=trunc(iw/2)*2:trunc(ih/2)*2';
           if (vfStr) {
-              execArgs = [...execArgs, '-vf', `format=yuv420p,${vfStr}`];
+              execArgs = [...execArgs, '-vf', `${scaleFilter},format=yuv420p,${vfStr}`];
           } else {
-              execArgs = [...execArgs, '-pix_fmt', 'yuv420p'];
+              execArgs = [...execArgs, '-vf', `${scaleFilter},format=yuv420p`];
           }
           execArgs = [...execArgs, '-shortest', outputName];
           await ffmpeg.exec(execArgs);
@@ -134,7 +135,7 @@ export default function CustomEditor({
         if (selectedMusic) {
             execArgs = [...execArgs, '-i', 'audio.mp3'];
             if (vfStr) {
-                execArgs = [...execArgs, '-c:v', 'libx264', '-vf', vfStr];
+                execArgs = [...execArgs, '-c:v', 'libx264', '-vf', `scale=trunc(iw/2)*2:trunc(ih/2)*2,${vfStr}`];
             } else {
                 execArgs = [...execArgs, '-c:v', 'copy'];
             }
@@ -142,7 +143,7 @@ export default function CustomEditor({
         } else {
             // Video with filter but no new music (keep original audio if any)
             if (vfStr) {
-                execArgs = [...execArgs, '-c:v', 'libx264', '-vf', vfStr, '-c:a', 'copy', outputName];
+                execArgs = [...execArgs, '-c:v', 'libx264', '-vf', `scale=trunc(iw/2)*2:trunc(ih/2)*2,${vfStr}`, '-c:a', 'copy', outputName];
             } else {
                 // This shouldn't be reached due to !needsFFmpeg check, but just in case
                 execArgs = [...execArgs, '-c:v', 'copy', '-c:a', 'copy', outputName];
