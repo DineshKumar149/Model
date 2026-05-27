@@ -2,7 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Loader2, Music, Wand2, Check, Sliders, RotateCw, 
   FlipHorizontal, FlipVertical, Crop, FastForward, 
-  Volume2, VolumeX, Scissors, Download, Palette, Layers
+  Volume2, VolumeX, Scissors, Download, Palette, Layers,
+  Upload, X
 } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
@@ -37,12 +38,12 @@ export default function CustomEditor({
   
   const ffmpegRef = useRef(new FFmpeg());
   const mediaRef = useRef<HTMLVideoElement & HTMLImageElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const loadFFmpeg = async () => {
       const ffmpeg = ffmpegRef.current;
       if (ffmpeg.loaded) return;
-      ffmpeg.on('log', ({ message }) => console.log(message));
       try {
         await ffmpeg.load({
           coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
@@ -74,6 +75,25 @@ export default function CustomEditor({
       return () => mediaRef.current?.removeEventListener('timeupdate', handleTimeUpdate);
     }
   }, [videoConfig.speed, videoConfig.trimStart, videoConfig.trimEnd, audioConfig.volume, audioConfig.muted, mediaType, duration]);
+
+  const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setAudioConfig(prev => ({
+        ...prev,
+        selectedMusic: {
+          id: `custom-${Date.now()}`,
+          title: file.name,
+          artist: 'Local Upload',
+          audioUrl: url,
+          duration: '0:00',
+          coverUrl: ''
+        } as any
+      }));
+    }
+    if (e.target) e.target.value = '';
+  };
 
   const getPreviewStyle = () => {
     let filter = '';
@@ -578,8 +598,49 @@ export default function CustomEditor({
                 </div>
 
                 <div className="space-y-4">
-                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest block">Add Music Layer</span>
-                  <MusicPicker onSelect={(m) => setAudioConfig(prev => ({...prev, selectedMusic: m}))} selected={audioConfig.selectedMusic} />
+                  <div className="flex items-center justify-between px-1">
+                    <div>
+                      <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest block mb-1">Soundtrack</span>
+                      <p className="text-[11px] text-zinc-400">Mix in a new track or upload your own.</p>
+                    </div>
+                    <input 
+                      type="file" 
+                      accept="audio/*" 
+                      ref={fileInputRef} 
+                      className="hidden" 
+                      onChange={handleAudioUpload}
+                    />
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 border border-indigo-500/30"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Upload
+                    </button>
+                  </div>
+                  
+                  {audioConfig.selectedMusic?.id.toString().startsWith('custom-') ? (
+                    <div className="bg-indigo-500/10 border border-indigo-500/30 p-3 rounded-xl flex items-center justify-between mt-4">
+                       <div className="flex items-center gap-3 overflow-hidden">
+                         <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center flex-shrink-0">
+                           <Music className="w-5 h-5 text-indigo-400" />
+                         </div>
+                         <div className="truncate pr-4">
+                           <p className="text-sm font-bold text-white truncate">{audioConfig.selectedMusic.title}</p>
+                           <p className="text-xs text-indigo-300 truncate">Local Audio File</p>
+                         </div>
+                       </div>
+                       <button 
+                         onClick={() => setAudioConfig(prev => ({...prev, selectedMusic: null}))}
+                         className="text-zinc-500 hover:text-white p-2 flex-shrink-0 bg-zinc-900 rounded-full hover:bg-zinc-800 transition-colors"
+                       >
+                         <X className="w-4 h-4" />
+                       </button>
+                    </div>
+                  ) : (
+                    <div className="mt-4">
+                      <MusicPicker onSelect={(m) => setAudioConfig(prev => ({...prev, selectedMusic: m}))} selected={audioConfig.selectedMusic} />
+                    </div>
+                  )}
                 </div>
               </div>
             )}
