@@ -564,7 +564,15 @@ const Sidebar = ({ onOpenCreate }: SidebarProps) => {
         <div style={{ padding: "20px 12px 0", flexShrink: 0 }}>
           <Link
             to="/gallery"
-            onClick={() => { setActivePanel("none"); setMoreState("closed"); }}
+            onClick={(e) => {
+              if (window.location.pathname === '/gallery') {
+                e.preventDefault();
+                window.location.reload();
+              } else {
+                setActivePanel("none"); 
+                setMoreState("closed");
+              }
+            }}
             style={{
               display: "flex", alignItems: "center", minHeight: 48, borderRadius: 12,
               padding: expanded ? "0 12px" : "0", gap: expanded ? 16 : 0,

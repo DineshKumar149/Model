@@ -556,8 +556,14 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
         </div>
 
         {showDiscardConfirm && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
-            <div className="bg-card rounded-2xl shadow-2xl overflow-hidden w-[90%] max-w-[340px] animate-scale-in border border-border/30">
+          <div 
+            className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in"
+            onClick={(e) => { e.stopPropagation(); setShowDiscardConfirm(false); }}
+          >
+            <div 
+              className="bg-card rounded-2xl shadow-2xl overflow-hidden w-[90%] max-w-[340px] animate-scale-in border border-border/30"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="px-6 pt-6 pb-4 text-center">
                 <h3 className="text-lg font-bold text-foreground mb-1.5">
                   Discard post?
@@ -568,14 +574,14 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
               </div>
               <div className="border-t border-border/30">
                 <button
-                  onClick={handleClose}
+                  onClick={(e) => { e.stopPropagation(); handleClose(); }}
                   className="w-full py-3.5 text-[15px] font-bold text-red-500 hover:bg-red-500/5 transition-colors"
                 >
                   Discard
                 </button>
                 <div className="border-t border-border/30">
                   <button
-                    onClick={() => setShowDiscardConfirm(false)}
+                    onClick={(e) => { e.stopPropagation(); setShowDiscardConfirm(false); }}
                     className="w-full py-3.5 text-[15px] font-medium text-foreground hover:bg-secondary/30 transition-colors"
                   >
                     Cancel
