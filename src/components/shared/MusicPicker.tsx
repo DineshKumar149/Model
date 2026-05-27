@@ -26,16 +26,14 @@ export default function MusicPicker({ selected, onSelect }: MusicPickerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Search iTunes API
+  // Search iTunes API (or show defaults)
   useEffect(() => {
     const searchTracks = async () => {
-      if (!query.trim()) {
-        setTracks([]);
-        return;
-      }
       setIsLoading(true);
       try {
-        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=20`);
+        const searchTerm = query.trim() ? query : "top hits";
+        const limit = query.trim() ? 20 : 5;
+        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(searchTerm)}&entity=song&limit=${limit}`);
         const data = await res.json();
         
         const results: Track[] = data.results.map((t: any) => ({
@@ -46,8 +44,8 @@ export default function MusicPicker({ selected, onSelect }: MusicPickerProps) {
           duration: formatDuration(t.trackTimeMillis || 0),
           previewUrl: t.previewUrl,
           coverUrl: t.artworkUrl100,
-          coverColor: "#" + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0') // fallback color
-        })).filter((t: Track) => t.previewUrl); // only keep tracks with audio previews
+          coverColor: "#" + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')
+        })).filter((t: Track) => t.previewUrl);
 
         setTracks(results);
       } catch (err) {
@@ -74,7 +72,7 @@ export default function MusicPicker({ selected, onSelect }: MusicPickerProps) {
     setIsUploading(true);
     try {
       const ext = file.name.split('.').pop() || 'mp3';
-      const path = `custom-music/${user.id}/${Date.now()}.${ext}`;
+      const path = `${user.id}/custom-music/${Date.now()}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
         .from("post-images")

@@ -86,7 +86,6 @@ export default function FilerobotEditor({
         }}
         Text={{ text: 'Add Text' }}
         Rotate={{ angle: 90, componentType: 'slider' }}
-        tabsIds={[TABS.ADJUST, TABS.ANNOTATE, TABS.WATERMARK, TABS.FILTERS, TABS.FINETUNE]}
         defaultTabId={TABS.ADJUST}
         defaultToolId={TOOLS.CROP}
         savingPixelRatio={4}

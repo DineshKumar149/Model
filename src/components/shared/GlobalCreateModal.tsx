@@ -50,6 +50,8 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
   const [altText, setAltText] = useState("");
   const [musicTitle, setMusicTitle] = useState("");
   const [selectedMusic, setSelectedMusic] = useState<Track | null>(null);
+  const [musicStartTime, setMusicStartTime] = useState(0);
+  const [addToStory, setAddToStory] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -94,6 +96,8 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
     setAltText("");
     setMusicTitle("");
     setSelectedMusic(null);
+    setMusicStartTime(0);
+    setAddToStory(false);
     setShowAdvanced(false);
     setShowCustomEditor(false);
     onClose();
@@ -167,22 +171,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
         const isVid = mimeType.startsWith("video/");
         const url = await uploadFileToStorage(editedBlob, fileName, mimeType);
 
-        await supabase.from("posts").insert({
-          user_id: user.id,
-          image_url: url,
-          image_urls: isVid ? [] : [url],
-          caption: caption.trim() || null,
-          media_type: isVid ? "video" : "image",
-          hide_likes: hideLikes,
-          turn_off_commenting: turnOffCommenting,
-          alt_text: altText.trim() || null,
-          music_title: musicTitle.trim() || null,
-          music_url: selectedMusic?.previewUrl || null,
-        });
-      } else if (selectedFiles.length === 1) {
-        const file = selectedFiles[0];
-        const isVid = file.type.startsWith("video/");
-        const url = await uploadFileToStorage(file, file.name, file.type);
+        const musicUrlWithTime = selectedMusic?.previewUrl ? `${selectedMusic.previewUrl}#t=${musicStartTime}` : null;
 
         await supabase.from("posts").insert({
           user_id: user.id,
@@ -194,14 +183,51 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
           turn_off_commenting: turnOffCommenting,
           alt_text: altText.trim() || null,
           music_title: musicTitle.trim() || null,
-          music_url: selectedMusic?.previewUrl || null,
+          music_url: musicUrlWithTime,
         });
+
+        if (addToStory) {
+          await supabase.from("stories").insert({
+            user_id: user.id,
+            media_url: url,
+            media_type: isVid ? "video" : "image",
+          });
+        }
+      } else if (selectedFiles.length === 1) {
+        const file = selectedFiles[0];
+        const isVid = file.type.startsWith("video/");
+        const url = await uploadFileToStorage(file, file.name, file.type);
+
+        const musicUrlWithTime = selectedMusic?.previewUrl ? `${selectedMusic.previewUrl}#t=${musicStartTime}` : null;
+
+        await supabase.from("posts").insert({
+          user_id: user.id,
+          image_url: url,
+          image_urls: isVid ? [] : [url],
+          caption: caption.trim() || null,
+          media_type: isVid ? "video" : "image",
+          hide_likes: hideLikes,
+          turn_off_commenting: turnOffCommenting,
+          alt_text: altText.trim() || null,
+          music_title: musicTitle.trim() || null,
+          music_url: musicUrlWithTime,
+        });
+
+        if (addToStory) {
+          await supabase.from("stories").insert({
+            user_id: user.id,
+            media_url: url,
+            media_type: isVid ? "video" : "image",
+          });
+        }
       } else {
         const urls: string[] = [];
         for (const file of selectedFiles) {
           const url = await uploadFileToStorage(file, file.name, file.type);
           urls.push(url);
         }
+
+        const musicUrlWithTime = selectedMusic?.previewUrl ? `${selectedMusic.previewUrl}#t=${musicStartTime}` : null;
 
         await supabase.from("posts").insert({
           user_id: user.id,
@@ -213,8 +239,16 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
           turn_off_commenting: turnOffCommenting,
           alt_text: altText.trim() || null,
           music_title: musicTitle.trim() || null,
-          music_url: selectedMusic?.previewUrl || null,
+          music_url: musicUrlWithTime,
         });
+
+        if (addToStory) {
+          await supabase.from("stories").insert({
+            user_id: user.id,
+            media_url: urls[0],
+            media_type: "image",
+          });
+        }
       }
 
       toast({ title: "Post shared successfully! 🎉" });
@@ -255,7 +289,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
         onClick={handleOutsideClick}
       >
         <div
-          className="bg-card w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-border/50 animate-scale-in"
+          className="bg-card w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden border border-border/50 animate-scale-in"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
@@ -405,6 +439,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                       />
                     </div>
 
+                    {/* MUSIC SECTION */}
                     <div className="p-4 border-b border-border/50 shrink-0">
                       <MusicPicker 
                         selected={selectedMusic} 
@@ -414,11 +449,28 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                         }} 
                       />
                       {musicTitle && (
-                        <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
-                          <Music2 className="w-3 h-3 text-primary" />
-                          Music will be played on your post
-                        </p>
+                        <div className="mt-4 px-2">
+                          <label className="text-xs font-medium text-muted-foreground mb-2 flex justify-between">
+                            <span>Adjust Start Time</span>
+                            <span>{musicStartTime}s</span>
+                          </label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="30"
+                            step="1"
+                            value={musicStartTime}
+                            onChange={(e) => setMusicStartTime(parseInt(e.target.value))}
+                            className="w-full accent-primary"
+                          />
+                        </div>
                       )}
+                    </div>
+
+                    {/* STORY INTEGRATION SECTION */}
+                    <div className="p-4 shrink-0 flex items-center justify-between">
+                       <span className="text-sm font-semibold">Also add to my Story</span>
+                       <Switch checked={addToStory} onCheckedChange={setAddToStory} />
                     </div>
 
                     <div className="border-t border-border/50">

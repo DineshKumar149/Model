@@ -58,6 +58,15 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
     if (item.media_type === "image" && item.music_url && audioRef.current) {
       audioRef.current.muted = videoMuted;
       if (videoPlaying) {
+        
+        // Handle custom start time if appended as #t=
+        if (item.music_url.includes('#t=')) {
+           const timeStr = item.music_url.split('#t=')[1];
+           if (timeStr && audioRef.current.currentTime < parseFloat(timeStr)) {
+              audioRef.current.currentTime = parseFloat(timeStr);
+           }
+        }
+        
         audioRef.current.play().catch(() => {});
       } else {
         audioRef.current.pause();
@@ -75,12 +84,13 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
     }
   }, [videoPlaying, videoMuted, item.media_type]);
 
-  // IntersectionObserver for auto-playback when post is visible
+  // IntersectionObserver for auto-playback and auto-unmute when post is visible
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           setVideoPlaying(entry.isIntersecting);
+          setVideoMuted(!entry.isIntersecting);
         });
       },
       { threshold: 0.6 }
