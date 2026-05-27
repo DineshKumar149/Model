@@ -1,5 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Loader2, Music, Wand2, Check, Sliders, RotateCw, FlipHorizontal, FlipVertical, Crop, FastForward, Volume2, VolumeX } from 'lucide-react';
+import { 
+  Loader2, Music, Wand2, Check, Sliders, RotateCw, 
+  FlipHorizontal, FlipVertical, Crop, FastForward, 
+  Volume2, VolumeX, Scissors, Download, Palette, Layers
+} from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 import MusicPicker, { Track } from '@/components/shared/MusicPicker';
@@ -17,16 +21,19 @@ export default function CustomEditor({
   onClose,
   initialMediaUrl,
   mediaType = 'image',
-  title = 'Advanced Editor'
+  title = 'Pro Editor Studio'
 }: CustomEditorProps) {
-  const [activeTab, setActiveTab] = useState<'filters' | 'adjust' | 'transform' | 'speed' | 'audio'>('filters');
+  const [activeTab, setActiveTab] = useState<'filters' | 'adjust' | 'color' | 'transform' | 'video' | 'audio' | 'export'>('filters');
   const [selectedFilter, setSelectedFilter] = useState<string>('normal');
-  const [adjustments, setAdjustments] = useState({ brightness: 100, contrast: 100, saturation: 100, vignette: 0, noise: 0 });
+  const [adjustments, setAdjustments] = useState({ brightness: 100, contrast: 100, saturation: 100, vignette: 0, noise: 0, blur: 0, sharpen: 0 });
+  const [color, setColor] = useState({ hue: 0, gamma: 100, temperature: 0 });
   const [transforms, setTransforms] = useState({ flipH: false, flipV: false, rotate: 0, ratio: 'original' });
-  const [speed, setSpeed] = useState(1);
+  const [videoConfig, setVideoConfig] = useState({ speed: 1, trimStart: 0, trimEnd: 100 });
+  const [duration, setDuration] = useState(0);
   const [audioConfig, setAudioConfig] = useState({ volume: 100, muted: false, selectedMusic: null as Track | null });
+  const [exportSettings, setExportSettings] = useState({ quality: 80, format: mediaType === 'video' ? 'mp4' : 'jpg' });
   const [isProcessing, setIsProcessing] = useState(false);
-  const [message, setMessage] = useState('Loading...');
+  const [message, setMessage] = useState('Initializing Studio...');
   
   const ffmpegRef = useRef(new FFmpeg());
   const mediaRef = useRef<HTMLVideoElement & HTMLImageElement>(null);
@@ -43,8 +50,7 @@ export default function CustomEditor({
         });
         setMessage('Ready');
       } catch (e) {
-        console.error('Failed to load FFmpeg:', e);
-        setMessage('Ready (No FFmpeg)');
+        setMessage('Ready (Limited Mode)');
       }
     };
     loadFFmpeg();
@@ -52,24 +58,43 @@ export default function CustomEditor({
 
   useEffect(() => {
     if (mediaRef.current && mediaType === 'video') {
-      mediaRef.current.playbackRate = speed;
+      mediaRef.current.playbackRate = videoConfig.speed;
       mediaRef.current.volume = audioConfig.muted ? 0 : audioConfig.volume / 100;
+      
+      const handleTimeUpdate = () => {
+        if (!mediaRef.current) return;
+        const endTime = (videoConfig.trimEnd / 100) * duration;
+        const startTime = (videoConfig.trimStart / 100) * duration;
+        if (mediaRef.current.currentTime >= endTime) {
+          mediaRef.current.currentTime = startTime;
+        }
+      };
+      
+      mediaRef.current.addEventListener('timeupdate', handleTimeUpdate);
+      return () => mediaRef.current?.removeEventListener('timeupdate', handleTimeUpdate);
     }
-  }, [speed, audioConfig.volume, audioConfig.muted, mediaType]);
+  }, [videoConfig.speed, videoConfig.trimStart, videoConfig.trimEnd, audioConfig.volume, audioConfig.muted, mediaType, duration]);
 
   const getPreviewStyle = () => {
     let filter = '';
     switch (selectedFilter) {
       case 'grayscale': filter += 'grayscale(100%) '; break;
       case 'sepia': filter += 'sepia(100%) '; break;
-      case 'blur': filter += 'blur(6px) '; break;
-      case 'invert': filter += 'invert(100%) '; break;
       case 'vintage': filter += 'sepia(50%) contrast(150%) saturate(120%) '; break;
       case 'dramatic': filter += 'contrast(180%) saturate(80%) brightness(90%) '; break;
+      case 'cyberpunk': filter += 'hue-rotate(90deg) saturate(200%) contrast(120%) '; break;
+      case 'film': filter += 'contrast(110%) saturate(90%) sepia(20%) '; break;
     }
+    
     filter += `brightness(${adjustments.brightness}%) `;
     filter += `contrast(${adjustments.contrast}%) `;
     filter += `saturate(${adjustments.saturation}%) `;
+    filter += `hue-rotate(${color.hue}deg) `;
+    
+    if (color.temperature !== 0) {
+      filter += color.temperature > 0 ? `sepia(${color.temperature / 2}%) ` : `saturate(${100 + color.temperature}%) `;
+    }
+    if (adjustments.blur > 0) filter += `blur(${adjustments.blur / 10}px) `;
 
     let transform = '';
     if (transforms.flipH) transform += 'scaleX(-1) ';
@@ -87,23 +112,7 @@ export default function CustomEditor({
 
     setIsProcessing(true);
     try {
-      const needsFFmpeg = 
-        audioConfig.selectedMusic || 
-        selectedFilter !== 'normal' ||
-        adjustments.brightness !== 100 ||
-        adjustments.contrast !== 100 ||
-        adjustments.saturation !== 100 ||
-        adjustments.vignette !== 0 ||
-        adjustments.noise !== 0 ||
-        transforms.flipH ||
-        transforms.flipV ||
-        transforms.rotate !== 0 ||
-        transforms.ratio !== 'original' ||
-        speed !== 1 ||
-        audioConfig.volume !== 100 ||
-        audioConfig.muted;
-
-      if (!needsFFmpeg || !ffmpegRef.current.loaded) {
+      if (!ffmpegRef.current.loaded) {
         const response = await fetch(initialMediaUrl);
         const blob = await response.blob();
         onSave(blob, blob.type);
@@ -114,7 +123,7 @@ export default function CustomEditor({
       setMessage('Preparing workspace...');
 
       const inputExt = mediaType === 'video' ? 'mp4' : 'jpg';
-      const outputExt = mediaType === 'video' || audioConfig.selectedMusic ? 'mp4' : 'jpg';
+      const outputExt = exportSettings.format;
       const inputMediaName = `input.${inputExt}`;
       const outputName = `output.${outputExt}`;
 
@@ -123,9 +132,10 @@ export default function CustomEditor({
         await ffmpeg.writeFile('audio.mp3', await fetchFile(audioConfig.selectedMusic.audioUrl));
       }
 
-      setMessage('Processing media...');
+      setMessage('Rendering pipeline...');
 
       const vf: string[] = [];
+      
       if (transforms.ratio === '1:1') vf.push("crop='min(iw,ih)':'min(iw,ih)'");
       else if (transforms.ratio === '4:5') vf.push("crop='min(iw,ih*(4/5))':'min(ih,iw*(5/4))'");
       else if (transforms.ratio === '16:9') vf.push("crop='min(iw,ih*(16/9))':'min(ih,iw*(9/16))'");
@@ -139,38 +149,43 @@ export default function CustomEditor({
       switch (selectedFilter) {
         case 'grayscale': vf.push('colorchannelmixer=.3:.4:.3:0:.3:.4:.3:0:.3:.4:.3'); break;
         case 'sepia': vf.push('colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131'); break;
-        case 'blur': vf.push('boxblur=7:1'); break;
-        case 'invert': vf.push('negate'); break;
         case 'vintage': vf.push('colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131', 'eq=contrast=1.5:brightness=-0.1:saturation=1.2'); break;
         case 'dramatic': vf.push('eq=contrast=1.8:saturation=0.8:brightness=-0.1'); break;
+        case 'cyberpunk': vf.push('hue=h=90', 'eq=saturation=2:contrast=1.2'); break;
+        case 'film': vf.push('eq=contrast=1.1:saturation=0.9', 'colorbalance=rs=.2:gs=.1:bs=-.1'); break;
       }
 
       const b = (adjustments.brightness - 100) / 100;
       const c = adjustments.contrast / 100;
       const s = adjustments.saturation / 100;
-      if (b !== 0 || c !== 1 || s !== 1) {
-        vf.push(`eq=brightness=${b}:contrast=${c}:saturation=${s}`);
+      const g = color.gamma / 100;
+      if (b !== 0 || c !== 1 || s !== 1 || g !== 1) {
+        vf.push(`eq=brightness=${b}:contrast=${c}:saturation=${s}:gamma=${g}`);
       }
 
-      if (adjustments.vignette > 0) {
-        vf.push(`vignette='PI*${(adjustments.vignette / 100) * 0.5}'`);
-      }
+      if (color.hue !== 0) vf.push(`hue=h=${color.hue}`);
       
-      if (adjustments.noise > 0) {
-        vf.push(`noise=alls=${Math.floor((adjustments.noise / 100) * 50)}:allf=t+u`);
+      if (color.temperature !== 0) {
+        const t = color.temperature / 100;
+        vf.push(`colorbalance=rs=${t > 0 ? t : 0}:bs=${t < 0 ? Math.abs(t) : 0}`);
       }
 
-      if (mediaType === 'video' && speed !== 1) {
-        vf.push(`setpts=${1/speed}*PTS`);
+      if (adjustments.blur > 0) vf.push(`boxblur=${Math.floor(adjustments.blur / 10) + 1}:1`);
+      if (adjustments.sharpen > 0) vf.push(`unsharp=5:5:${adjustments.sharpen / 20}:5:5:0.0`);
+      if (adjustments.vignette > 0) vf.push(`vignette='PI*${(adjustments.vignette / 100) * 0.5}'`);
+      if (adjustments.noise > 0) vf.push(`noise=alls=${Math.floor((adjustments.noise / 100) * 50)}:allf=t+u`);
+
+      if (mediaType === 'video' && videoConfig.speed !== 1) {
+        vf.push(`setpts=${1/videoConfig.speed}*PTS`);
       }
 
-      if (outputExt === 'mp4') {
+      if (outputExt === 'mp4' || outputExt === 'webm') {
         vf.push('scale=trunc(iw/2)*2:trunc(ih/2)*2');
         vf.push('format=yuv420p');
       }
 
       const af: string[] = [];
-      if (mediaType === 'video' && speed !== 1 && !audioConfig.selectedMusic) af.push(`atempo=${speed}`);
+      if (mediaType === 'video' && videoConfig.speed !== 1 && !audioConfig.selectedMusic) af.push(`atempo=${videoConfig.speed}`);
       if (audioConfig.muted) af.push('volume=0');
       else if (audioConfig.volume !== 100) af.push(`volume=${audioConfig.volume/100}`);
 
@@ -179,8 +194,17 @@ export default function CustomEditor({
 
       let execArgs: string[] = [];
 
+      let startTimeStr = "0";
+      let durationStr = "0";
+      if (mediaType === 'video' && duration > 0) {
+        const startSec = (videoConfig.trimStart / 100) * duration;
+        const endSec = (videoConfig.trimEnd / 100) * duration;
+        startTimeStr = startSec.toFixed(3);
+        durationStr = (endSec - startSec).toFixed(3);
+      }
+
       if (mediaType === 'image') {
-        if (audioConfig.selectedMusic) {
+        if (audioConfig.selectedMusic && (outputExt === 'mp4' || outputExt === 'webm')) {
           execArgs = ['-loop', '1', '-framerate', '30', '-i', inputMediaName, '-i', 'audio.mp3', '-c:v', 'libx264'];
           if (vfStr) execArgs.push('-vf', vfStr);
           execArgs.push('-c:a', 'aac');
@@ -189,35 +213,51 @@ export default function CustomEditor({
         } else {
           execArgs = ['-i', inputMediaName];
           if (vfStr) execArgs.push('-vf', vfStr);
+          if (outputExt === 'webp') execArgs.push('-qscale', Math.floor(100 - exportSettings.quality).toString());
+          else if (outputExt === 'jpg') execArgs.push('-q:v', Math.floor((100 - exportSettings.quality) / 10 + 2).toString());
           execArgs.push(outputName);
         }
       } else {
         execArgs = ['-i', inputMediaName];
-        if (audioConfig.selectedMusic) {
-          execArgs.push('-i', 'audio.mp3', '-c:v', 'libx264');
-          if (vfStr) execArgs.push('-vf', vfStr);
-          execArgs.push('-map', '0:v:0', '-map', '1:a:0', '-c:a', 'aac');
-          if (afStr) execArgs.push('-af', afStr);
-          execArgs.push('-shortest', outputName);
-        } else {
-          execArgs.push('-c:v', 'libx264');
-          if (vfStr) execArgs.push('-vf', vfStr);
-          if (afStr) {
-            execArgs.push('-c:a', 'aac', '-af', afStr);
-          } else {
-            execArgs.push('-c:a', 'copy');
-          }
-          execArgs.push(outputName);
+        if (audioConfig.selectedMusic) execArgs.push('-i', 'audio.mp3');
+        
+        if (mediaType === 'video' && duration > 0) {
+          execArgs.push('-ss', startTimeStr, '-t', durationStr);
         }
+
+        execArgs.push('-c:v', outputExt === 'webm' ? 'libvpx-vp9' : 'libx264');
+        
+        if (vfStr) execArgs.push('-vf', vfStr);
+        
+        if (outputExt === 'mp4' || outputExt === 'webm') {
+          const crf = Math.floor(51 - (exportSettings.quality / 100) * 51);
+          execArgs.push('-crf', crf.toString());
+        }
+
+        if (audioConfig.selectedMusic) {
+          execArgs.push('-map', '0:v:0', '-map', '1:a:0', '-c:a', outputExt === 'webm' ? 'libvorbis' : 'aac');
+          if (afStr) execArgs.push('-af', afStr);
+          execArgs.push('-shortest');
+        } else {
+          if (afStr) execArgs.push('-c:a', outputExt === 'webm' ? 'libvorbis' : 'aac', '-af', afStr);
+          else execArgs.push('-c:a', 'copy');
+        }
+        
+        execArgs.push(outputName);
       }
 
       await ffmpeg.exec(execArgs);
       
-      setMessage('Finalizing...');
+      setMessage('Finalizing build...');
       const data = await ffmpeg.readFile(outputName);
-      const mime = outputExt === 'mp4' ? 'video/mp4' : 'image/jpeg';
-      const blob = new Blob([(data as Uint8Array).buffer], { type: mime });
+      let mime = 'application/octet-stream';
+      if (outputExt === 'mp4') mime = 'video/mp4';
+      if (outputExt === 'webm') mime = 'video/webm';
+      if (outputExt === 'jpg') mime = 'image/jpeg';
+      if (outputExt === 'png') mime = 'image/png';
+      if (outputExt === 'webp') mime = 'image/webp';
       
+      const blob = new Blob([(data as Uint8Array).buffer], { type: mime });
       onSave(blob, mime, audioConfig.selectedMusic?.title);
     } catch (err) {
       console.error(err);
@@ -229,51 +269,56 @@ export default function CustomEditor({
     }
   };
 
-  const filters = [
-    { id: 'normal', name: 'Normal' },
-    { id: 'grayscale', name: 'B & W' },
-    { id: 'sepia', name: 'Sepia' },
-    { id: 'vintage', name: 'Vintage' },
-    { id: 'dramatic', name: 'Dramatic' },
-    { id: 'blur', name: 'Blur' },
-    { id: 'invert', name: 'Invert' },
-  ];
+  const getMimeTypes = () => {
+    if (mediaType === 'video') return [{ id: 'mp4', label: 'MP4 (H.264)' }, { id: 'webm', label: 'WebM (VP9)' }];
+    return [{ id: 'jpg', label: 'JPEG' }, { id: 'png', label: 'PNG' }, { id: 'webp', label: 'WebP' }];
+  };
 
   return (
-    <div className="fixed inset-0 z-[700] bg-[#000] flex flex-col font-sans">
-      <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-black">
+    <div className="fixed inset-0 z-[700] bg-[#050505] flex flex-col font-sans select-none">
+      <div className="flex items-center justify-between p-4 border-b border-zinc-800/50 bg-[#0a0a0a]">
         <button 
           onClick={onClose} 
           disabled={isProcessing}
-          className="text-white hover:text-white/80 px-4 py-2 font-medium transition-colors disabled:opacity-50"
+          className="text-zinc-400 hover:text-white px-4 py-2 text-sm font-semibold transition-colors disabled:opacity-50"
         >
-          Discard
+          Cancel
         </button>
-        <h2 className="text-white font-semibold tracking-tight">{title}</h2>
+        <div className="flex items-center gap-2">
+           <Layers className="w-4 h-4 text-indigo-500" />
+           <h2 className="text-white font-bold tracking-wide text-sm">{title}</h2>
+        </div>
         <button 
           onClick={handleSave} 
           disabled={isProcessing}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2 rounded-full text-sm font-semibold flex items-center gap-2 transition-colors disabled:opacity-50"
+          className="bg-white hover:bg-zinc-200 text-black px-5 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-colors disabled:opacity-50"
         >
-          {isProcessing && <Loader2 className="w-4 h-4 animate-spin" />}
-          {isProcessing ? 'Processing' : 'Continue'}
-          {!isProcessing && <Check className="w-4 h-4 ml-1" />}
+          {isProcessing ? (
+            <><Loader2 className="w-4 h-4 animate-spin text-indigo-600" /> Exporting</>
+          ) : (
+            <>Export <Download className="w-4 h-4 ml-0.5" /></>
+          )}
         </button>
       </div>
 
-      <div className="flex-1 overflow-hidden relative flex flex-col md:flex-row bg-[#0a0a0c]">
+      <div className="flex-1 overflow-hidden relative flex flex-col md:flex-row bg-[#050505]">
         {isProcessing && (
-          <div className="absolute inset-0 z-20 bg-black/80 flex flex-col items-center justify-center backdrop-blur-sm">
-             <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl flex flex-col items-center shadow-2xl">
-               <Loader2 className="w-10 h-10 text-indigo-500 animate-spin mb-4" />
-               <p className="text-white font-medium text-center">{message}</p>
+          <div className="absolute inset-0 z-50 bg-black/90 flex flex-col items-center justify-center backdrop-blur-md">
+             <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl flex flex-col items-center shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+               <div className="relative w-16 h-16 mb-6 flex items-center justify-center">
+                 <div className="absolute inset-0 rounded-full border-4 border-zinc-800"></div>
+                 <div className="absolute inset-0 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin"></div>
+                 <Wand2 className="w-6 h-6 text-indigo-400" />
+               </div>
+               <h3 className="text-white font-bold text-lg mb-2">Processing Media</h3>
+               <p className="text-zinc-400 text-sm font-medium">{message}</p>
              </div>
           </div>
         )}
 
-        <div className="flex-1 flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="flex-1 flex items-center justify-center p-4 relative overflow-hidden bg-[url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAIklEQVQ4T2NkYGD4z8DAwMgQI8CowagBowYQA8NJhAwMIwAC/hIC3Y90CQAAAABJRU5ErkJggg==')]">
           <div 
-            className="w-full max-w-[450px] bg-black rounded-xl overflow-hidden relative shadow-2xl border border-zinc-800/50 flex items-center justify-center transition-all duration-300"
+            className="w-full max-w-[500px] bg-black rounded-sm overflow-hidden relative shadow-2xl flex items-center justify-center ring-1 ring-white/10"
             style={{ 
               aspectRatio: transforms.ratio === 'original' ? '9/16' : transforms.ratio.replace(':', '/'),
               maxHeight: '100%'
@@ -285,7 +330,8 @@ export default function CustomEditor({
                   <video 
                     ref={mediaRef as any}
                     src={initialMediaUrl} 
-                    className="w-full h-full transition-all duration-300" 
+                    onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+                    className="w-full h-full transition-all duration-200" 
                     style={{ 
                       objectFit: transforms.ratio === 'original' ? 'contain' : 'cover', 
                       ...getPreviewStyle() 
@@ -296,7 +342,7 @@ export default function CustomEditor({
                   <img 
                     ref={mediaRef as any}
                     src={initialMediaUrl} 
-                    className="w-full h-full transition-all duration-300" 
+                    className="w-full h-full transition-all duration-200" 
                     style={{ 
                       objectFit: transforms.ratio === 'original' ? 'contain' : 'cover', 
                       ...getPreviewStyle() 
@@ -307,68 +353,72 @@ export default function CustomEditor({
                 
                 {adjustments.vignette > 0 && (
                   <div 
-                    className="absolute inset-0 pointer-events-none transition-opacity duration-300"
-                    style={{ 
-                      background: `radial-gradient(circle, transparent 40%, rgba(0,0,0,${adjustments.vignette / 100}) 120%)` 
-                    }}
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ background: `radial-gradient(circle, transparent 40%, rgba(0,0,0,${adjustments.vignette / 100}) 120%)` }}
                   />
                 )}
                 
                 {adjustments.noise > 0 && (
                   <div 
-                    className="absolute inset-0 pointer-events-none opacity-50 mix-blend-overlay transition-opacity duration-300"
+                    className="absolute inset-0 pointer-events-none opacity-50 mix-blend-overlay"
                     style={{ 
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`, 
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`, 
                       opacity: adjustments.noise / 100 
                     }}
                   />
                 )}
               </>
             ) : (
-               <p className="text-white/50 flex items-center justify-center h-full">No media selected</p>
+               <div className="flex flex-col items-center gap-3 text-white/30">
+                 <Layers className="w-10 h-10" />
+                 <p className="text-sm font-medium">No media selected</p>
+               </div>
             )}
           </div>
         </div>
 
-        <div className="w-full md:w-[380px] bg-zinc-900/90 border-t md:border-t-0 md:border-l border-zinc-800 flex flex-col z-10">
-          <div className="flex w-full border-b border-zinc-800 overflow-x-auto scrollbar-none">
+        <div className="w-full md:w-[400px] bg-[#0a0a0a] border-t md:border-t-0 md:border-l border-zinc-800/80 flex flex-col z-10 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
+          <div className="flex w-full border-b border-zinc-800/80 overflow-x-auto scrollbar-none px-2 py-1">
             {[
               { id: 'filters', icon: Wand2, label: 'Filters' },
               { id: 'adjust', icon: Sliders, label: 'Adjust' },
-              { id: 'transform', icon: Crop, label: 'Crop' },
-              ...(mediaType === 'video' ? [{ id: 'speed', icon: FastForward, label: 'Speed' }] : []),
-              { id: 'audio', icon: Music, label: 'Audio' }
+              { id: 'color', icon: Palette, label: 'Color' },
+              { id: 'transform', icon: Crop, label: 'Layout' },
+              ...(mediaType === 'video' ? [{ id: 'video', icon: Scissors, label: 'Video' }] : []),
+              { id: 'audio', icon: Music, label: 'Audio' },
+              { id: 'export', icon: Download, label: 'Export' }
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex-1 min-w-[75px] py-4 text-[11px] font-semibold flex flex-col items-center justify-center gap-1.5 transition-colors uppercase tracking-wider ${activeTab === tab.id ? 'text-indigo-400 border-b-2 border-indigo-400 bg-indigo-400/5' : 'text-zinc-400 hover:text-zinc-200'}`}
+                className={`flex-1 min-w-[70px] py-4 text-[10px] font-bold flex flex-col items-center justify-center gap-2 transition-all uppercase tracking-widest rounded-lg ${activeTab === tab.id ? 'text-indigo-400 bg-indigo-500/10' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'}`}
               >
-                <tab.icon className="w-4 h-4" /> {tab.label}
+                <tab.icon className={`w-4 h-4 ${activeTab === tab.id ? 'drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]' : ''}`} /> 
+                {tab.label}
               </button>
             ))}
           </div>
 
-          <div className="flex-1 overflow-y-auto p-5 scrollbar-thin">
+          <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
             {activeTab === 'filters' && (
-              <div className="grid grid-cols-2 gap-3">
-                {filters.map(filter => (
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { id: 'normal', name: 'Original' },
+                  { id: 'film', name: 'Kodak 400' },
+                  { id: 'vintage', name: '1977' },
+                  { id: 'dramatic', name: 'Cinematic' },
+                  { id: 'cyberpunk', name: 'Neon City' },
+                  { id: 'grayscale', name: 'Noir' },
+                ].map(filter => (
                   <button
                     key={filter.id}
                     onClick={() => setSelectedFilter(filter.id)}
-                    className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${selectedFilter === filter.id ? 'bg-indigo-600/20 border-indigo-500 ring-1 ring-indigo-500' : 'bg-zinc-800/40 border-transparent hover:bg-zinc-800'}`}
+                    className={`group flex flex-col items-center gap-3 p-2 rounded-2xl transition-all ${selectedFilter === filter.id ? 'bg-indigo-500/10' : 'hover:bg-zinc-900'}`}
                   >
-                    <div 
-                      className="w-full aspect-square rounded-lg bg-zinc-700 bg-cover bg-center overflow-hidden relative"
-                    >
-                       <img 
-                         src={initialMediaUrl} 
-                         className="w-full h-full object-cover" 
-                         style={{ filter: getPreviewStyle().filter }}
-                         alt=""
-                       />
+                    <div className={`w-full aspect-[3/4] rounded-xl bg-zinc-800 bg-cover bg-center overflow-hidden relative transition-all ${selectedFilter === filter.id ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-[#0a0a0a]' : 'group-hover:ring-1 ring-zinc-700 ring-offset-2 ring-offset-[#0a0a0a]'}`}>
+                       <img src={initialMediaUrl} className="w-full h-full object-cover" style={{ filter: getPreviewStyle().filter }} alt="" />
                     </div>
-                    <span className={`text-xs font-semibold tracking-wide ${selectedFilter === filter.id ? 'text-indigo-400' : 'text-zinc-300'}`}>
+                    <span className={`text-[11px] font-bold uppercase tracking-wider ${selectedFilter === filter.id ? 'text-indigo-400' : 'text-zinc-400 group-hover:text-zinc-200'}`}>
                       {filter.name}
                     </span>
                   </button>
@@ -377,148 +427,188 @@ export default function CustomEditor({
             )}
 
             {activeTab === 'adjust' && (
-              <div className="space-y-7">
-                {(['brightness', 'contrast', 'saturation', 'vignette', 'noise'] as const).map(setting => (
-                  <div key={setting} className="space-y-3">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-zinc-300 font-medium capitalize">{setting}</span>
-                      <span className="text-zinc-500 text-xs font-mono">{adjustments[setting]}</span>
+              <div className="space-y-8">
+                {(['brightness', 'contrast', 'saturation', 'vignette', 'noise', 'blur', 'sharpen'] as const).map(setting => (
+                  <div key={setting} className="space-y-4">
+                    <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest text-zinc-400">
+                      <span>{setting}</span>
+                      <span className="text-zinc-500 bg-zinc-900 px-2 py-1 rounded-md">{adjustments[setting]}</span>
                     </div>
                     <input 
                       type="range" 
-                      min="0" max={setting === 'vignette' || setting === 'noise' ? "100" : "200"} 
+                      min="0" max={['vignette', 'noise', 'blur', 'sharpen'].includes(setting) ? "100" : "200"} 
                       value={adjustments[setting]}
                       onChange={(e) => setAdjustments(prev => ({ ...prev, [setting]: parseInt(e.target.value) }))}
-                      className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                      className="w-full h-1.5 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-white"
                     />
                   </div>
                 ))}
-                <button 
-                  onClick={() => setAdjustments({ brightness: 100, contrast: 100, saturation: 100, vignette: 0, noise: 0 })}
-                  className="w-full py-2.5 mt-4 rounded-xl bg-zinc-800/50 text-zinc-300 text-sm font-semibold hover:bg-zinc-700 transition-colors border border-zinc-700/50"
-                >
-                  Reset Adjustments
-                </button>
+              </div>
+            )}
+
+            {activeTab === 'color' && (
+              <div className="space-y-8">
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest text-zinc-400">
+                    <span>Hue Shift</span>
+                    <span className="text-zinc-500 bg-zinc-900 px-2 py-1 rounded-md">{color.hue}°</span>
+                  </div>
+                  <input type="range" min="0" max="360" value={color.hue} onChange={(e) => setColor(prev => ({...prev, hue: parseInt(e.target.value)}))} className="w-full h-1.5 rounded-full appearance-none cursor-pointer" style={{ background: 'linear-gradient(to right, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000)' }} />
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest text-zinc-400">
+                    <span>Temperature</span>
+                    <span className="text-zinc-500 bg-zinc-900 px-2 py-1 rounded-md">{color.temperature}</span>
+                  </div>
+                  <input type="range" min="-100" max="100" value={color.temperature} onChange={(e) => setColor(prev => ({...prev, temperature: parseInt(e.target.value)}))} className="w-full h-1.5 rounded-full appearance-none cursor-pointer" style={{ background: 'linear-gradient(to right, #4361ee, #4cc9f0, #e9ecef, #f72585, #7209b7)' }} />
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest text-zinc-400">
+                    <span>Gamma</span>
+                    <span className="text-zinc-500 bg-zinc-900 px-2 py-1 rounded-md">{(color.gamma / 100).toFixed(2)}</span>
+                  </div>
+                  <input type="range" min="10" max="300" value={color.gamma} onChange={(e) => setColor(prev => ({...prev, gamma: parseInt(e.target.value)}))} className="w-full h-1.5 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-white" />
+                </div>
               </div>
             )}
 
             {activeTab === 'transform' && (
-              <div className="space-y-8">
-                <div className="space-y-3">
-                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1 block">Aspect Ratio</span>
-                  <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-10">
+                <div className="space-y-4">
+                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest block mb-4">Format</span>
+                  <div className="grid grid-cols-2 gap-4">
                     {[
-                      { id: 'original', label: 'Original', ratio: 'auto' },
-                      { id: '1:1', label: 'Square', ratio: '1/1' },
-                      { id: '4:5', label: 'Portrait', ratio: '4/5' },
-                      { id: '16:9', label: 'Landscape', ratio: '16/9' },
+                      { id: 'original', label: 'Free', ratio: 'auto' },
+                      { id: '1:1', label: '1:1 IG', ratio: '1/1' },
+                      { id: '4:5', label: '4:5 Post', ratio: '4/5' },
+                      { id: '16:9', label: '16:9 YT', ratio: '16/9' },
                     ].map(r => (
                       <button 
                         key={r.id}
                         onClick={() => setTransforms(prev => ({ ...prev, ratio: r.id }))}
-                        className={`py-3 rounded-xl border font-medium text-sm transition-all flex flex-col items-center gap-2 ${transforms.ratio === r.id ? 'bg-indigo-600/20 border-indigo-500 text-indigo-400' : 'bg-zinc-800/40 border-transparent hover:bg-zinc-800 text-zinc-300'}`}
+                        className={`py-4 rounded-2xl border-2 font-bold text-xs transition-all flex flex-col items-center gap-3 uppercase tracking-wider ${transforms.ratio === r.id ? 'bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.2)]' : 'bg-transparent border-zinc-800 hover:border-zinc-600 text-zinc-400'}`}
                       >
-                        <div className="w-6 h-6 border-2 border-current rounded-sm" style={{ aspectRatio: r.ratio }} />
+                        <div className="w-6 h-6 border-2 border-current rounded-[4px]" style={{ aspectRatio: r.ratio }} />
                         {r.label}
                       </button>
                     ))}
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                   <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1 block">Orientation</span>
-                   <div className="grid grid-cols-3 gap-3">
-                    <button 
-                      onClick={() => setTransforms(prev => ({ ...prev, rotate: (prev.rotate + 90) % 360 }))}
-                      className="flex flex-col items-center gap-2 p-3 rounded-xl bg-zinc-800/40 hover:bg-zinc-800 border border-transparent transition-all"
-                    >
-                      <RotateCw className="w-5 h-5 text-zinc-300" />
-                      <span className="text-[11px] font-semibold text-zinc-400">Rotate</span>
+                <div className="space-y-4">
+                   <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest block mb-4">Rotate & Flip</span>
+                   <div className="grid grid-cols-3 gap-4">
+                    <button onClick={() => setTransforms(prev => ({ ...prev, rotate: (prev.rotate + 90) % 360 }))} className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-zinc-900 hover:bg-zinc-800 transition-all text-zinc-300">
+                      <RotateCw className="w-5 h-5" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">90°</span>
                     </button>
-                    <button 
-                      onClick={() => setTransforms(prev => ({ ...prev, flipH: !prev.flipH }))}
-                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${transforms.flipH ? 'bg-indigo-600/20 border-indigo-500' : 'bg-zinc-800/40 border-transparent hover:bg-zinc-800'}`}
-                    >
-                      <FlipHorizontal className={`w-5 h-5 ${transforms.flipH ? 'text-indigo-400' : 'text-zinc-300'}`} />
-                      <span className={`text-[11px] font-semibold ${transforms.flipH ? 'text-indigo-400' : 'text-zinc-400'}`}>Flip X</span>
+                    <button onClick={() => setTransforms(prev => ({ ...prev, flipH: !prev.flipH }))} className={`flex flex-col items-center gap-3 p-4 rounded-2xl transition-all ${transforms.flipH ? 'bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500' : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300'}`}>
+                      <FlipHorizontal className="w-5 h-5" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Horiz</span>
                     </button>
-                    <button 
-                      onClick={() => setTransforms(prev => ({ ...prev, flipV: !prev.flipV }))}
-                      className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${transforms.flipV ? 'bg-indigo-600/20 border-indigo-500' : 'bg-zinc-800/40 border-transparent hover:bg-zinc-800'}`}
-                    >
-                      <FlipVertical className={`w-5 h-5 ${transforms.flipV ? 'text-indigo-400' : 'text-zinc-300'}`} />
-                      <span className={`text-[11px] font-semibold ${transforms.flipV ? 'text-indigo-400' : 'text-zinc-400'}`}>Flip Y</span>
+                    <button onClick={() => setTransforms(prev => ({ ...prev, flipV: !prev.flipV }))} className={`flex flex-col items-center gap-3 p-4 rounded-2xl transition-all ${transforms.flipV ? 'bg-indigo-500/20 text-indigo-400 ring-1 ring-indigo-500' : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300'}`}>
+                      <FlipVertical className="w-5 h-5" />
+                      <span className="text-[10px] font-bold uppercase tracking-wider">Vert</span>
                     </button>
                   </div>
                 </div>
-                
-                <button 
-                  onClick={() => setTransforms({ flipH: false, flipV: false, rotate: 0, ratio: 'original' })}
-                  className="w-full py-2.5 rounded-xl bg-zinc-800/50 text-zinc-300 text-sm font-semibold hover:bg-zinc-700 transition-colors border border-zinc-700/50"
-                >
-                  Reset Layout
-                </button>
               </div>
             )}
 
-            {activeTab === 'speed' && mediaType === 'video' && (
-              <div className="space-y-6">
-                <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1 block mb-2">Playback Speed</span>
-                <div className="grid grid-cols-2 gap-3">
-                  {[0.5, 0.75, 1, 1.25, 1.5, 2].map(s => (
-                    <button 
-                      key={s}
-                      onClick={() => setSpeed(s)} 
-                      className={`py-3.5 rounded-xl border font-bold text-sm transition-all ${speed === s ? 'bg-indigo-600/20 border-indigo-500 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.2)]' : 'bg-zinc-800/40 border-transparent hover:bg-zinc-800 text-zinc-300'}`}
-                    >
-                      {s}x
-                    </button>
-                  ))}
+            {activeTab === 'video' && mediaType === 'video' && (
+              <div className="space-y-10">
+                <div className="space-y-6">
+                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest block">Trim Timeline</span>
+                  <div className="px-2 space-y-4">
+                    <div className="h-16 bg-zinc-900 rounded-xl border border-zinc-800 relative overflow-hidden flex items-center px-1">
+                      <div className="absolute top-0 bottom-0 bg-indigo-500/20 border-y-2 border-indigo-500" style={{ left: `${videoConfig.trimStart}%`, width: `${videoConfig.trimEnd - videoConfig.trimStart}%` }} />
+                      <div className="absolute top-0 bottom-0 w-2 bg-white rounded-full cursor-ew-resize -ml-1 z-10 shadow-lg" style={{ left: `${videoConfig.trimStart}%` }} />
+                      <div className="absolute top-0 bottom-0 w-2 bg-white rounded-full cursor-ew-resize -ml-1 z-10 shadow-lg" style={{ left: `${videoConfig.trimEnd}%` }} />
+                    </div>
+                    
+                    <div className="flex gap-4">
+                      <div className="flex-1 space-y-2">
+                         <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Start %</label>
+                         <input type="range" min="0" max={videoConfig.trimEnd - 5} value={videoConfig.trimStart} onChange={(e) => setVideoConfig(prev => ({...prev, trimStart: parseInt(e.target.value)}))} className="w-full accent-indigo-500" />
+                      </div>
+                      <div className="flex-1 space-y-2">
+                         <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">End %</label>
+                         <input type="range" min={videoConfig.trimStart + 5} max="100" value={videoConfig.trimEnd} onChange={(e) => setVideoConfig(prev => ({...prev, trimEnd: parseInt(e.target.value)}))} className="w-full accent-indigo-500" />
+                      </div>
+                    </div>
+                    <div className="text-center text-xs text-zinc-400 font-mono">
+                       Duration: {((videoConfig.trimEnd - videoConfig.trimStart) / 100 * duration).toFixed(1)}s
+                    </div>
+                  </div>
                 </div>
-                <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-4 mt-6">
-                   <p className="text-xs text-indigo-300/80 leading-relaxed text-center">
-                     Changing speed will automatically adjust the original audio pitch and tempo.
-                   </p>
+
+                <div className="space-y-4">
+                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest block mb-4">Speed Control</span>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[0.5, 1, 1.5, 2].map(s => (
+                      <button key={s} onClick={() => setVideoConfig(prev => ({...prev, speed: s}))} className={`py-3 rounded-xl font-bold text-xs transition-all ${videoConfig.speed === s ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800'}`}>
+                        {s}x
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
 
             {activeTab === 'audio' && (
-              <div className="space-y-8">
-                <div className="space-y-4">
-                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest px-1 block">Original Audio</span>
-                  <div className="bg-zinc-800/30 p-4 rounded-xl border border-zinc-800">
-                    <div className="flex justify-between items-center text-sm mb-4">
-                      <span className="text-zinc-300 font-medium">Volume</span>
-                      <span className="text-zinc-500 font-mono">{audioConfig.muted ? 0 : audioConfig.volume}%</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <button 
-                        onClick={() => setAudioConfig(prev => ({...prev, muted: !prev.muted}))}
-                        className="p-2 rounded-full hover:bg-zinc-700 transition-colors"
-                      >
-                        {audioConfig.muted ? <VolumeX className="text-red-400 w-5 h-5"/> : <Volume2 className="text-zinc-300 w-5 h-5"/>}
+              <div className="space-y-10">
+                <div className="space-y-6">
+                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest block">Primary Audio</span>
+                  <div className="bg-zinc-900/80 p-5 rounded-2xl border border-zinc-800/80">
+                    <div className="flex items-center gap-6">
+                      <button onClick={() => setAudioConfig(prev => ({...prev, muted: !prev.muted}))} className={`p-4 rounded-xl transition-all ${audioConfig.muted ? 'bg-red-500/20 text-red-400 ring-1 ring-red-500' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'}`}>
+                        {audioConfig.muted ? <VolumeX className="w-6 h-6"/> : <Volume2 className="w-6 h-6"/>}
                       </button>
-                      <input 
-                        type="range" 
-                        min="0" max="200" 
-                        value={audioConfig.muted ? 0 : audioConfig.volume} 
-                        onChange={(e) => setAudioConfig(prev => ({...prev, volume: parseInt(e.target.value), muted: false}))} 
-                        className="flex-1 h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-indigo-500" 
-                      />
+                      <div className="flex-1 space-y-3">
+                        <div className="flex justify-between text-xs font-bold text-zinc-400 uppercase tracking-wider">
+                           <span>Volume</span>
+                           <span className="text-white">{audioConfig.muted ? 0 : audioConfig.volume}%</span>
+                        </div>
+                        <input type="range" min="0" max="200" value={audioConfig.muted ? 0 : audioConfig.volume} onChange={(e) => setAudioConfig(prev => ({...prev, volume: parseInt(e.target.value), muted: false}))} className="w-full h-1.5 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-indigo-500" />
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-4">
-                  <div className="px-1">
-                    <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest block mb-1">Soundtrack</span>
-                    <p className="text-[11px] text-zinc-400">Mix in a new track. Auto-loops for images.</p>
+                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest block">Add Music Layer</span>
+                  <MusicPicker onSelect={(m) => setAudioConfig(prev => ({...prev, selectedMusic: m}))} selected={audioConfig.selectedMusic} />
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'export' && (
+              <div className="space-y-10">
+                <div className="space-y-4">
+                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest block mb-4">Export Format</span>
+                  <div className="grid grid-cols-2 gap-4">
+                     {getMimeTypes().map(format => (
+                        <button key={format.id} onClick={() => setExportSettings(prev => ({...prev, format: format.id}))} className={`p-4 rounded-2xl border-2 font-bold text-sm transition-all flex flex-col items-center gap-2 uppercase tracking-wider ${exportSettings.format === format.id ? 'bg-white text-black border-white shadow-lg' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700'}`}>
+                           {format.label}
+                        </button>
+                     ))}
                   </div>
-                  <MusicPicker 
-                    onSelect={(m) => setAudioConfig(prev => ({...prev, selectedMusic: m}))} 
-                    selected={audioConfig.selectedMusic} 
-                  />
+                </div>
+
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest text-zinc-400">
+                    <span>Render Quality</span>
+                    <span className="text-zinc-500 bg-zinc-900 px-3 py-1 rounded-md">{exportSettings.quality}%</span>
+                  </div>
+                  <div className="px-2">
+                     <input type="range" min="10" max="100" value={exportSettings.quality} onChange={(e) => setExportSettings(prev => ({...prev, quality: parseInt(e.target.value)}))} className="w-full h-2 bg-zinc-800 rounded-full appearance-none cursor-pointer accent-green-500" />
+                     <div className="flex justify-between text-[10px] text-zinc-600 font-bold uppercase tracking-widest mt-3">
+                        <span>Fast / Smaller</span>
+                        <span>Best Quality</span>
+                     </div>
+                  </div>
                 </div>
               </div>
             )}
