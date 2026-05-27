@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import FilerobotEditor from "@/components/editor/FilerobotEditor";
 import CreateStory from "@/components/stories/CreateStory";
 import MusicPicker from "@/components/shared/MusicPicker";
+import MusicTimeline from "@/components/shared/MusicTimeline";
 import { Track } from "@/lib/music";
 
 interface GlobalCreateModalProps {
@@ -448,20 +449,14 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                           setMusicTitle(t ? `${t.title} - ${t.artist}` : "");
                         }} 
                       />
-                      {musicTitle && (
-                        <div className="mt-4 px-2">
-                          <label className="text-xs font-medium text-muted-foreground mb-2 flex justify-between">
-                            <span>Adjust Start Time</span>
-                            <span>{musicStartTime}s</span>
-                          </label>
-                          <input
-                            type="range"
-                            min="0"
-                            max="30"
-                            step="1"
-                            value={musicStartTime}
-                            onChange={(e) => setMusicStartTime(parseInt(e.target.value))}
-                            className="w-full accent-primary"
+                      {musicTitle && selectedMusic?.previewUrl && (
+                        <div className="mt-4 pt-4 border-t border-border/40">
+                          <MusicTimeline
+                            audioUrl={selectedMusic.previewUrl}
+                            maxDuration={30} // default for iTunes previews
+                            snippetDuration={15}
+                            startTime={musicStartTime}
+                            onChangeStartTime={setMusicStartTime}
                           />
                         </div>
                       )}
