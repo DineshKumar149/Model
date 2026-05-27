@@ -19,7 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import CustomEditor from "@/components/editor/CustomEditor";
+import FilerobotEditor from "@/components/editor/FilerobotEditor";
 import CreateStory from "@/components/stories/CreateStory";
 import MusicPicker from "@/components/shared/MusicPicker";
 import { Track } from "@/lib/music";
@@ -35,7 +35,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
 
   const [mode, setMode] = useState<"select" | "post" | "story">("select");
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
-  const [showCustomEditor, setShowCustomEditor] = useState(false);
+  const [showEditor, setShowEditor] = useState(false);
 
   // Post Creation States
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -93,7 +93,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
     setMusicTitle("");
     setSelectedMusic(null);
     setShowAdvanced(false);
-    setShowCustomEditor(false);
+    setShowEditor(false);
     onClose();
   };
 
@@ -112,7 +112,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
 
     // Only auto-open editor for single file
     if (arr.length === 1) {
-      setShowCustomEditor(true);
+      setShowEditor(true);
     }
   };
 
@@ -128,7 +128,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
     setPreviewUrls([newUrl]);
     setCurrentSlide(0);
 
-    setShowCustomEditor(false);
+    setShowEditor(false);
     toast({ title: "Edit applied ✨", description: "Your media is ready to share." });
   };
 
@@ -230,17 +230,14 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
     }
   };
 
-  // If showing CE.SDK editor, render it full-screen
-  if (showCustomEditor && (selectedFiles.length > 0 || editedBlob)) {
-    const currentMediaUrl = primaryPreviewUrl || undefined;
-    const currentMediaType = isVideo ? "video" : "image";
+  // If showing Filerobot editor, render it full-screen
+  if (showEditor && (selectedFiles.length > 0 || editedBlob)) {
     return (
-      <CustomEditor
+      <FilerobotEditor
+        initialMediaUrl={previewUrls[0]}
+        onClose={() => setShowEditor(false)}
         onSave={handleEditorSave}
-        onClose={() => setShowCustomEditor(false)}
-        initialMediaUrl={currentMediaUrl}
-        mediaType={currentMediaType}
-        title={isVideo ? "Edit Video Post" : "Edit Photo Post"}
+        title="Image Editor"
       />
     );
   }
@@ -384,15 +381,17 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                           />
                         )}
 
-                        {/* Edit with Custom Editor button — only for single file */}
-                        <button
-                          onClick={() => setShowCustomEditor(true)}
-                          disabled={uploading}
-                          className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-xl transition-all z-10"
-                        >
-                          <Wand2 className="w-3.5 h-3.5" />
-                          Edit with Studio
-                        </button>
+                        {/* Edit button — only for single image file */}
+                        {(!selectedFiles[0]?.type.startsWith("video/")) && (
+                          <button
+                            onClick={() => setShowEditor(true)}
+                            disabled={uploading}
+                            className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-xl transition-all z-10"
+                          >
+                            <Wand2 className="w-3.5 h-3.5" />
+                            Edit Image
+                          </button>
+                        )}
 
                         {/* Edited badge */}
                         {editedBlob && (

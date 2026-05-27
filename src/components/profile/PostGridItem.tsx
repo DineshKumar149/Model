@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Play, Wand2 } from "lucide-react";
-import CustomEditor from "@/components/editor/CustomEditor";
+import FilerobotEditor from "@/components/editor/FilerobotEditor";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/components/ui/use-toast";
@@ -24,7 +24,7 @@ const PostGridItem = ({ post, onClick, isOwner = false }: PostGridItemProps) => 
   const mediaType: "image" | "video" =
     post.media_type === "video" ? "video" : "image";
 
-  // Called when CustomEditor exports edited media — upload to Supabase and update post
+  // Called when FilerobotEditor exports edited media — upload to Supabase and update post
   const handleEditorSave = async (blob: Blob, mimeType: string) => {
     if (!user || !post.id) return;
     setShowEditor(false);
@@ -78,15 +78,14 @@ const PostGridItem = ({ post, onClick, isOwner = false }: PostGridItemProps) => 
     }
   };
 
-  // Render CustomEditor full-screen
+  // Render FilerobotEditor full-screen
   if (showEditor) {
     return (
-      <CustomEditor
+      <FilerobotEditor
         onSave={handleEditorSave}
         onClose={() => setShowEditor(false)}
         initialMediaUrl={thumb || undefined}
-        mediaType={mediaType}
-        title={mediaType === "video" ? "Edit Video Post" : "Edit Photo Post"}
+        title="Edit Photo Post"
       />
     );
   }
@@ -142,8 +141,8 @@ const PostGridItem = ({ post, onClick, isOwner = false }: PostGridItemProps) => 
         </div>
       </div>
 
-      {/* Edit with CustomEditor button — only for owner */}
-      {isOwner && (
+      {/* Edit with FilerobotEditor button — only for owner and only for images */}
+      {isOwner && mediaType === "image" && (
         <button
           onClick={(e) => {
             e.stopPropagation(); // prevent opening PostDetailModal
@@ -151,7 +150,7 @@ const PostGridItem = ({ post, onClick, isOwner = false }: PostGridItemProps) => 
           }}
           disabled={isUploading}
           className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-1 px-2 py-1 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-[10px] font-bold shadow-lg z-10"
-          title="Edit post with Custom editor"
+          title="Edit post with Image Editor"
         >
           <Wand2 className="w-3 h-3" />
           {isUploading ? "Saving..." : "Edit"}

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
 import { addHours } from "date-fns";
-import CustomEditor from "@/components/editor/CustomEditor";
+import FilerobotEditor from "@/components/editor/FilerobotEditor";
 
 interface CreateStoryProps {
   onClose: () => void;
@@ -21,8 +21,8 @@ export default function CreateStory({ onClose, onCreated }: CreateStoryProps) {
   const [caption, setCaption] = useState("");
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [showCustomEditor, setShowCustomEditor] = useState(false);
-  // Edited blob from CustomEditor (overrides original file)
+  const [showEditor, setShowEditor] = useState(false);
+  // Edited blob from FilerobotEditor
   const [editedBlob, setEditedBlob] = useState<Blob | null>(null);
   const [editedMimeType, setEditedMimeType] = useState<string>("image/png");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -54,8 +54,10 @@ export default function CreateStory({ onClose, onCreated }: CreateStoryProps) {
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
     
-    // Automatically open the editor
-    setShowCustomEditor(true);
+    // Automatically open the editor if it's an image
+    if (type === "image") {
+      setShowEditor(true);
+    }
   }, []);
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,7 +98,7 @@ export default function CreateStory({ onClose, onCreated }: CreateStoryProps) {
       setMediaType("image");
     }
 
-    setShowCustomEditor(false);
+    setShowEditor(false);
 
     toast({
       title: "Edit applied ✨",
@@ -177,15 +179,14 @@ export default function CreateStory({ onClose, onCreated }: CreateStoryProps) {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // Show CustomEditor full-screen
-  if (showCustomEditor) {
+  // Show FilerobotEditor full-screen
+  if (showEditor) {
     return (
-      <CustomEditor
+      <FilerobotEditor
         onSave={handleEditorSave}
-        onClose={() => setShowCustomEditor(false)}
+        onClose={() => setShowEditor(false)}
         initialMediaUrl={previewUrl || undefined}
-        mediaType={mediaType}
-        title={mediaType === "video" ? "Edit Video Story" : "Edit Image Story"}
+        title="Edit Image Story"
       />
     );
   }
@@ -297,15 +298,17 @@ export default function CreateStory({ onClose, onCreated }: CreateStoryProps) {
                 </span>
               </div>
 
-              {/* Edit with CustomEditor button — for BOTH images and videos */}
-              <button
-                onClick={() => setShowCustomEditor(true)}
-                disabled={uploading}
-                className="absolute bottom-2 right-2 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-lg transition-all z-10"
-              >
-                <Wand2 className="w-3 h-3" />
-                {mediaType === "video" ? "Edit Video" : "Edit Photo"}
-              </button>
+              {/* Edit with FilerobotEditor button — only for images */}
+              {mediaType === "image" && (
+                <button
+                  onClick={() => setShowEditor(true)}
+                  disabled={uploading}
+                  className="absolute bottom-2 right-2 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-lg transition-all z-10"
+                >
+                  <Wand2 className="w-3 h-3" />
+                  Edit Photo
+                </button>
+              )}
             </div>
           )}
 
