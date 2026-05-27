@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import UserProfileModal from "@/components/shared/UserProfileModal";
 import ShareDialog from "@/components/shared/ShareDialog";
 import { isAdminUser } from "@/lib/admin";
+import { AudioPreviewer } from "@/lib/music";
 
 const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) => {
   const { toast } = useToast();
@@ -49,6 +50,22 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
     if (!el) return;
     el.scrollTo({ left: currentImageIndex * el.offsetWidth, behavior: "smooth" });
   }, [currentImageIndex]);
+
+  const audioPlayerRef = useRef<AudioPreviewer | null>(null);
+  useEffect(() => {
+    audioPlayerRef.current = new AudioPreviewer();
+    return () => audioPlayerRef.current?.stop();
+  }, []);
+
+  useEffect(() => {
+    if (item.media_type === "image" && item.music_url) {
+      if (videoPlaying && !videoMuted) {
+        audioPlayerRef.current?.play(item.music_url, 0);
+      } else {
+        audioPlayerRef.current?.stop();
+      }
+    }
+  }, [videoPlaying, videoMuted, item.media_type, item.music_url]);
 
   useEffect(() => {
     if (item.media_type !== "video" || !feedVideoRef.current) return;
@@ -610,14 +627,33 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
               <div className="absolute top-3 right-3 bg-black/40 text-white text-[11px] font-bold px-2.5 py-1 rounded-full backdrop-blur-sm pointer-events-none">
                 {currentImageIndex + 1} / {imageList.length}
               </div>
+
+              {item.music_url && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setVideoMuted(!videoMuted); }}
+                  className="absolute bottom-4 right-4 w-8 h-8 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/80 transition-all z-20 pointer-events-auto"
+                >
+                  {videoMuted ? <VolumeX className="w-4.5 h-4.5" /> : <Volume2 className="w-4.5 h-4.5" />}
+                </button>
+              )}
             </>
           ) : (
-            <img
-              src={item.image_url}
-              alt="Post"
-              onDoubleClick={handleLike}
-              className="w-full h-auto object-cover max-h-[700px] transition-transform duration-700 group-hover:scale-[1.01] cursor-pointer"
-            />
+            <div className="relative w-full h-auto cursor-pointer" onClick={item.music_url ? togglePlayPause : undefined}>
+              <img
+                src={item.image_url}
+                alt="Post"
+                onDoubleClick={handleLike}
+                className="w-full h-auto object-cover max-h-[700px] transition-transform duration-700 group-hover:scale-[1.01]"
+              />
+              {item.music_url && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setVideoMuted(!videoMuted); }}
+                  className="absolute bottom-4 right-4 w-8 h-8 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/80 transition-all z-20 pointer-events-auto"
+                >
+                  {videoMuted ? <VolumeX className="w-4.5 h-4.5" /> : <Volume2 className="w-4.5 h-4.5" />}
+                </button>
+              )}
+            </div>
           )}
         </div>
 

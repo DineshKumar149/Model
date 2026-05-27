@@ -21,6 +21,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import CustomEditor from "@/components/editor/CustomEditor";
 import CreateStory from "@/components/stories/CreateStory";
+import MusicPicker from "@/components/shared/MusicPicker";
+import { Track } from "@/lib/music";
 
 interface GlobalCreateModalProps {
   isOpen: boolean;
@@ -46,6 +48,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
   const [turnOffCommenting, setTurnOffCommenting] = useState(false);
   const [altText, setAltText] = useState("");
   const [musicTitle, setMusicTitle] = useState("");
+  const [selectedMusic, setSelectedMusic] = useState<Track | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -88,6 +91,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
     setTurnOffCommenting(false);
     setAltText("");
     setMusicTitle("");
+    setSelectedMusic(null);
     setShowAdvanced(false);
     setShowCustomEditor(false);
     onClose();
@@ -171,6 +175,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
           turn_off_commenting: turnOffCommenting,
           alt_text: altText.trim() || null,
           music_title: musicTitle.trim() || null,
+          music_url: selectedMusic?.id || null,
         });
       } else if (selectedFiles.length === 1) {
         // Single unedited file
@@ -188,6 +193,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
           turn_off_commenting: turnOffCommenting,
           alt_text: altText.trim() || null,
           music_title: musicTitle.trim() || null,
+          music_url: selectedMusic?.id || null,
         });
       } else {
         // Multiple files — upload all as carousel post
@@ -207,6 +213,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
           turn_off_commenting: turnOffCommenting,
           alt_text: altText.trim() || null,
           music_title: musicTitle.trim() || null,
+          music_url: selectedMusic?.id || null,
         });
       }
 
@@ -412,19 +419,17 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
 
                     {/* Music title input */}
                     <div className="p-4 border-b border-border/50 shrink-0">
-                      <div className="relative">
-                        <Music2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                          placeholder="Add music title..."
-                          value={musicTitle}
-                          onChange={(e) => setMusicTitle(e.target.value)}
-                          className="pl-9 h-10 bg-secondary/50 border-transparent rounded-lg text-sm"
-                        />
-                      </div>
+                      <MusicPicker 
+                        selected={selectedMusic} 
+                        onSelect={(t) => {
+                          setSelectedMusic(t);
+                          setMusicTitle(t ? `${t.title} - ${t.artist}` : "");
+                        }} 
+                      />
                       {musicTitle && (
                         <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
                           <Music2 className="w-3 h-3 text-primary" />
-                          Music will be shown on the post
+                          Music will be played on your post
                         </p>
                       )}
                     </div>
