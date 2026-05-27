@@ -19,7 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import CESDKEditor from "@/components/editor/CESDKEditor";
+import CustomEditor from "@/components/editor/CustomEditor";
 import CreateStory from "@/components/stories/CreateStory";
 
 interface GlobalCreateModalProps {
@@ -33,7 +33,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
 
   const [mode, setMode] = useState<"select" | "post" | "story">("select");
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
-  const [showCESDKEditor, setShowCESDKEditor] = useState(false);
+  const [showCustomEditor, setShowCustomEditor] = useState(false);
 
   // Post Creation States
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -89,7 +89,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
     setAltText("");
     setMusicTitle("");
     setShowAdvanced(false);
-    setShowCESDKEditor(false);
+    setShowCustomEditor(false);
     onClose();
   };
 
@@ -108,21 +108,23 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
 
     // Only auto-open editor for single file
     if (arr.length === 1) {
-      setShowCESDKEditor(true);
+      setShowCustomEditor(true);
     }
   };
 
-  // Called when CE.SDK exports media
-  const handleEditorSave = (blob: Blob, mimeType: string) => {
+  const handleEditorSave = (blob: Blob, mimeType: string, selectedMusicTitle?: string) => {
     setEditedBlob(blob);
     setEditedMimeType(mimeType);
+    if (selectedMusicTitle) {
+      setMusicTitle(selectedMusicTitle);
+    }
 
     revokeAllUrls(previewUrls);
     const newUrl = URL.createObjectURL(blob);
     setPreviewUrls([newUrl]);
     setCurrentSlide(0);
 
-    setShowCESDKEditor(false);
+    setShowCustomEditor(false);
     toast({ title: "Edit applied ✨", description: "Your media is ready to share." });
   };
 
@@ -222,13 +224,13 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
   };
 
   // If showing CE.SDK editor, render it full-screen
-  if (showCESDKEditor && (selectedFiles.length > 0 || editedBlob)) {
+  if (showCustomEditor && (selectedFiles.length > 0 || editedBlob)) {
     const currentMediaUrl = primaryPreviewUrl || undefined;
     const currentMediaType = isVideo ? "video" : "image";
     return (
-      <CESDKEditor
+      <CustomEditor
         onSave={handleEditorSave}
-        onClose={() => setShowCESDKEditor(false)}
+        onClose={() => setShowCustomEditor(false)}
         initialMediaUrl={currentMediaUrl}
         mediaType={currentMediaType}
         title={isVideo ? "Edit Video Post" : "Edit Photo Post"}
@@ -375,14 +377,14 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                           />
                         )}
 
-                        {/* Edit with CE.SDK button — only for single file */}
+                        {/* Edit with Custom Editor button — only for single file */}
                         <button
-                          onClick={() => setShowCESDKEditor(true)}
+                          onClick={() => setShowCustomEditor(true)}
                           disabled={uploading}
                           className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-xl transition-all z-10"
                         >
                           <Wand2 className="w-3.5 h-3.5" />
-                          Edit with CE.SDK
+                          Edit with Studio
                         </button>
 
                         {/* Edited badge */}
