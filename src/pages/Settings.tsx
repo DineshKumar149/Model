@@ -303,7 +303,7 @@ const Settings = () => {
             </div>
 
             {/* Profile Pic Upload */}
-            <div className="flex flex-col items-center sm:flex-row gap-6 p-6 bg-white/30 dark:bg-black/20 rounded-2xl border border-white/40 dark:border-white/10">
+            <div className="flex flex-col items-center sm:flex-row gap-6 p-4 sm:p-6 bg-white/30 dark:bg-black/20 rounded-2xl border border-white/40 dark:border-white/10">
               <div className="relative group">
                 <Avatar className="w-24 h-24 ring-4 ring-white dark:ring-white/10 shadow-lg">
                   <AvatarImage src={avatarUrl || ""} className="object-cover" />
@@ -421,7 +421,7 @@ const Settings = () => {
               <p className="text-xs text-muted-foreground mt-0.5">Control who can see your profile and posts</p>
             </div>
             
-            <div className="flex flex-col gap-6 p-6 bg-white/30 dark:bg-black/20 rounded-2xl border border-white/40 dark:border-white/10">
+            <div className="flex flex-col gap-6 p-4 sm:p-6 bg-white/30 dark:bg-black/20 rounded-2xl border border-white/40 dark:border-white/10">
               <div className="flex items-center justify-between">
                 <div className="flex flex-col">
                   <span className="text-base font-bold text-foreground">Private account</span>
@@ -672,10 +672,10 @@ const Settings = () => {
         </div>
 
         {/* Dashboard Grid Layout */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8 items-start">
           {/* Settings Sidebar Nav */}
-          <div className="md:col-span-4 bg-white/60 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 rounded-[28px] shadow-xl p-4 space-y-1">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-3 pb-2 block">Account Preferences</span>
+          <div className="md:col-span-4 bg-white/60 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 rounded-[28px] shadow-xl p-3 md:p-4 md:space-y-1 flex flex-row md:flex-col overflow-x-auto scrollbar-none gap-2 md:gap-0 items-center md:items-stretch">
+            <span className="hidden md:block text-[10px] font-bold text-muted-foreground uppercase tracking-wider px-3 pb-2">Account Preferences</span>
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -683,23 +683,23 @@ const Settings = () => {
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id as any)}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-semibold transition-all ${
+                  className={`flex-shrink-0 md:w-full flex items-center justify-center md:justify-start gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl text-sm font-semibold transition-all ${
                     isActive
-                      ? "bg-primary text-primary-foreground shadow-md scale-[1.02]"
+                      ? "bg-primary text-primary-foreground shadow-md md:scale-[1.02]"
                       : item.variant === "destructive"
                       ? "text-destructive hover:bg-destructive/10"
-                      : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
+                      : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground bg-secondary/30 md:bg-transparent"
                   }`}
                 >
                   <Icon className="w-4 h-4 shrink-0" />
-                  <span>{item.label}</span>
+                  <span className="whitespace-nowrap">{item.label}</span>
                 </button>
               );
             })}
           </div>
 
           {/* Main Setting View Card */}
-          <div className="md:col-span-8 bg-white/60 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 rounded-[32px] shadow-xl p-6 sm:p-8 min-h-[480px]">
+          <div className="md:col-span-8 bg-white/60 dark:bg-black/40 backdrop-blur-xl border border-white/50 dark:border-white/10 rounded-[32px] shadow-xl p-5 sm:p-8 min-h-[480px]">
             {renderTabContent()}
           </div>
         </div>

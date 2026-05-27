@@ -109,7 +109,7 @@ const Login = () => {
       </div>
 
       <div
-        className="w-full max-w-md relative z-10 p-8 sm:p-10 rounded-[24px] shadow-2xl transition-all hover:-translate-y-1 duration-300"
+        className="w-full max-w-md relative z-10 p-6 sm:p-10 rounded-[24px] shadow-2xl transition-all hover:-translate-y-1 duration-300"
         style={{
           background: "rgba(255, 255, 255, 0.25)",
           backdropFilter: "blur(40px) saturate(250%)",
