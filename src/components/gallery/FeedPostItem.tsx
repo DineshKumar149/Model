@@ -1,23 +1,22 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, Link, Twitter, Facebook, Instagram, Trash2, ChevronLeft, ChevronRight, X, Music, Volume2, VolumeX } from "lucide-react";
+import { Heart, MessageCircle, Bookmark, MoreHorizontal, Trash2, ChevronLeft, ChevronRight, X, Music, Volume2, VolumeX } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import UserProfileModal from "@/components/shared/UserProfileModal";
 import ShareDialog from "@/components/shared/ShareDialog";
 import { isAdminUser } from "@/lib/admin";
-import { AudioPreviewer } from "@/lib/music";
+import { getTrackById } from "@/lib/music";
 
 const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) => {
   const { toast } = useToast();
   const [isDeleted, setIsDeleted] = useState(false);
   const isAdmin = isAdminUser(currentUser?.email);
 
-  const commentInputRef = useRef<HTMLInputElement>(null);
   const [authorProfile, setAuthorProfile] = useState<any>(null);
   const [modalUserId, setModalUserId] = useState<string | null>(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -41,50 +40,56 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
   const [videoMuted, setVideoMuted] = useState(true);
   const [videoPlaying, setVideoPlaying] = useState(true);
   const [showPlayIndicator, setShowPlayIndicator] = useState<"play" | "pause" | null>(null);
+  
   const feedVideoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const carouselRef = useRef<HTMLDivElement>(null);
 
-  // Sync carousel scroll position when index changes via arrow buttons
   useEffect(() => {
     const el = carouselRef.current;
     if (!el) return;
     el.scrollTo({ left: currentImageIndex * el.offsetWidth, behavior: "smooth" });
   }, [currentImageIndex]);
 
-  const audioPlayerRef = useRef<AudioPreviewer | null>(null);
+  // Video playback
   useEffect(() => {
-    audioPlayerRef.current = new AudioPreviewer();
-    return () => audioPlayerRef.current?.stop();
-  }, []);
-
-  useEffect(() => {
-    if (item.media_type === "image" && item.music_url) {
-      if (videoPlaying && !videoMuted) {
-        audioPlayerRef.current?.play(item.music_url, 0);
+    if (item.media_type === "video" && feedVideoRef.current) {
+      feedVideoRef.current.muted = videoMuted; 
+      if (videoPlaying) {
+        feedVideoRef.current.play().catch(() => {});
       } else {
-        audioPlayerRef.current?.stop();
+        feedVideoRef.current.pause();
       }
     }
-  }, [videoPlaying, videoMuted, item.media_type, item.music_url]);
+  }, [videoPlaying, videoMuted, item.media_type]);
 
+  // Audio playback for non-video posts
   useEffect(() => {
-    if (item.media_type !== "video" || !feedVideoRef.current) return;
-    if (videoPlaying) {
-      feedVideoRef.current.play().catch(() => {});
-    } else {
-      feedVideoRef.current.pause();
+    if (item.media_type !== "video" && audioRef.current) {
+      audioRef.current.muted = videoMuted;
+      if (videoPlaying && !videoMuted) {
+        audioRef.current.play().catch(() => {});
+      } else {
+        audioRef.current.pause();
+      }
     }
-  }, [videoPlaying, item.media_type]);
+  }, [videoPlaying, videoMuted, item.media_type]);
 
   const togglePlayPause = () => {
-    if (!feedVideoRef.current) return;
     const isPlaying = !videoPlaying;
     setVideoPlaying(isPlaying);
     setShowPlayIndicator(isPlaying ? "play" : "pause");
     setTimeout(() => setShowPlayIndicator(null), 500);
   };
 
-  // Load uploader's author profile and keep it in sync in real-time
+  const getAudioSource = () => {
+    if (!item.music_url) return undefined;
+    const track = getTrackById(item.music_url);
+    if (track) return track.previewUrl || (track as any).audioUrl;
+    if (item.music_url.startsWith("http") || item.music_url.startsWith("data:") || item.music_url.startsWith("blob:")) return item.music_url;
+    return undefined; 
+  };
+
   useEffect(() => {
     if (!item.user_id) return;
     const loadAuthor = async () => {
@@ -97,7 +102,6 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
     };
     loadAuthor();
 
-    // Subscribe to profile changes of the author of this post
     const ch = supabase
       .channel(`profile-${item.user_id}-${item.id}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `user_id=eq.${item.user_id}` }, (payload) => {
@@ -184,7 +188,6 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
     loadComments();
   }, [item.id, currentUser, loadComments]);
 
-  // Subscribe to real-time comment and profile updates for commenters
   useEffect(() => {
     const commentsCh = supabase
       .channel(`post-comments-${item.id}`)
@@ -193,7 +196,6 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
       })
       .subscribe();
 
-    // Also subscribe to changes in the profiles table to update commenter names/avatars in real-time
     const profilesCh = supabase
       .channel(`post-commenter-profiles-${item.id}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles" }, () => {
@@ -238,50 +240,6 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
             post_id: item.id
           });
         }
-      }
-    }
-  };
-
-  const handleAddComment = async () => {
-    if (!commentText.trim() || !currentUser) return;
-
-    const text = commentText.trim();
-    setCommentText("");
-
-    const tempId = Date.now().toString();
-    const isCommenterAdmin = currentUser.email?.toLowerCase() === "s73590363@gmail.com";
-    setComments((prev) => [
-      ...prev,
-      {
-        id: tempId,
-        text,
-        userId: currentUser.id,
-        userName:
-          currentUser.user_metadata?.display_name ||
-          (isCommenterAdmin ? "Admin" : currentUser.email?.split("@")[0] || "User"),
-        userAvatar: currentUser.user_metadata?.avatar_url || "",
-        time: "Just now",
-      },
-    ]);
-
-    const { data, error } = await supabase
-      .from("post_comments")
-      .insert({ post_id: item.id, user_id: currentUser.id, content: text })
-      .select()
-      .single();
-
-    if (!error && data) {
-      setComments((prev) =>
-        prev.map((c) => (c.id === tempId ? { ...c, id: data.id } : c))
-      );
-      if (item.user_id !== currentUser.id) {
-        await supabase.from("notifications").insert({
-          recipient_id: item.user_id,
-          sender_id: currentUser.id,
-          type: "comment",
-          content: text,
-          post_id: item.id
-        });
       }
     }
   };
@@ -355,13 +313,7 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
   const shareUrl = async (platform: string) => {
     setSharesCount((s) => s + 1);
     const url = window.location.href;
-    if (platform === "whatsapp") {
-      window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(url)}`, "_blank");
-    } else if (platform === "twitter") {
-      window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}`, "_blank");
-    } else if (platform === "facebook") {
-      window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, "_blank");
-    } else if (platform === "atome") {
+    if (platform === "atome") {
       navigator.clipboard.writeText(url);
       toast({ title: "Link copied for Atome!" });
     } else {
@@ -514,6 +466,12 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
         </div>
 
         <div className="post-media-mobile w-full bg-black/5 flex items-center justify-center overflow-hidden relative group">
+          
+          {/* Audio Tag for Image Posts with standard music */}
+          {item.media_type !== "video" && item.music_url && (
+            <audio ref={audioRef} src={getAudioSource()} loop playsInline />
+          )}
+
           {item.media_type === "video" ? (
             <div
               className="relative w-full h-auto cursor-pointer select-none"
@@ -529,7 +487,6 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
                 muted={videoMuted}
               />
 
-              {/* Mute/Unmute Icon Overlay in Bottom Right Corner */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -540,7 +497,6 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
                 {videoMuted ? <VolumeX className="w-4.5 h-4.5" /> : <Volume2 className="w-4.5 h-4.5" />}
               </button>
 
-              {/* Play/Pause brief indicator overlay */}
               {showPlayIndicator && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/10 pointer-events-none z-10">
                   <div className="w-14 h-14 rounded-full bg-black/60 backdrop-blur-sm flex items-center justify-center text-white scale-110 transition-all duration-300">
@@ -560,7 +516,6 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
             </div>
           ) : isCarousel ? (
             <>
-              {/* Scroll-snap horizontal carousel strip */}
               <div
                 ref={carouselRef}
                 onScroll={(e) => {
@@ -574,20 +529,20 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
                 {imageList.map((src, idx) => (
                   <div
                     key={idx}
-                    className="snap-center flex-shrink-0 w-full"
+                    className="snap-center flex-shrink-0 w-full relative"
                     onDoubleClick={handleLike}
+                    onClick={item.music_url ? togglePlayPause : undefined}
                   >
                     <img
                       src={src}
                       alt={`Photo ${idx + 1}`}
                       draggable={false}
-                      className="w-full h-auto object-cover max-h-[700px] select-none"
+                      className="w-full h-auto object-cover max-h-[700px] select-none cursor-pointer"
                     />
                   </div>
                 ))}
               </div>
 
-              {/* Prev / Next arrow buttons */}
               <div className="absolute inset-y-0 left-0 right-0 flex items-center justify-between px-3 pointer-events-none">
                 <Button
                   variant="secondary"
@@ -609,7 +564,6 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
                 </Button>
               </div>
 
-              {/* Dot indicators */}
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 bg-black/25 px-2.5 py-1.5 rounded-full backdrop-blur-sm pointer-events-none">
                 {imageList.map((_, idx) => (
                   <div
@@ -623,7 +577,6 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
                 ))}
               </div>
 
-              {/* Counter badge */}
               <div className="absolute top-3 right-3 bg-black/40 text-white text-[11px] font-bold px-2.5 py-1 rounded-full backdrop-blur-sm pointer-events-none">
                 {currentImageIndex + 1} / {imageList.length}
               </div>
@@ -732,16 +685,12 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
             </span>
           </div>
         )}
-
-
       </div>
 
-      {/* Glassmorphic comments overlay modal */}
       {showCommentsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/45 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white/80 dark:bg-black dark:text-white backdrop-blur-2xl border border-white/50 dark:border-white/10 rounded-[32px] shadow-2xl p-6 w-full max-w-md flex flex-col h-[520px] max-h-[90vh] animate-in zoom-in-95 duration-200 relative">
             
-            {/* Header */}
             <div className="flex justify-between items-center pb-4 border-b border-border/40">
               <div>
                 <h3 className="text-lg font-bold text-foreground dark:text-white">Comments</h3>
@@ -760,7 +709,6 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
               </Button>
             </div>
 
-            {/* Scrollable List */}
             <div className="flex-1 overflow-y-auto py-4 pr-1 space-y-4 scrollbar-thin">
               {comments.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
@@ -826,7 +774,6 @@ const FeedPostItem = ({ item, currentUser }: { item: any; currentUser: any }) =>
               )}
             </div>
 
-            {/* Input inside Modal */}
             {!item.turn_off_commenting ? (
               <div className="pt-3 border-t border-border/40 flex flex-col gap-2">
                 <div className="flex items-center gap-3 w-full">
