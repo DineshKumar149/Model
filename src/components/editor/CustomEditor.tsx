@@ -3,14 +3,14 @@ import {
   Loader2, Music, Wand2, Check, Sliders, RotateCw, 
   FlipHorizontal, FlipVertical, Crop, FastForward, 
   Volume2, VolumeX, Scissors, Download, Palette, Layers,
-  Upload, X
+  Upload, X, Type
 } from 'lucide-react';
 import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile } from '@ffmpeg/util';
 import MusicPicker, { Track } from '@/components/shared/MusicPicker';
 
 interface CustomEditorProps {
-  onSave: (blob: Blob, mimeType: string, musicTitle?: string) => void;
+  onSave: (blob: Blob, mimeType: string, musicTitle?: string, customFileName?: string) => void;
   onClose: () => void;
   initialMediaUrl?: string;
   mediaType?: 'image' | 'video';
@@ -32,7 +32,11 @@ export default function CustomEditor({
   const [videoConfig, setVideoConfig] = useState({ speed: 1, trimStart: 0, trimEnd: 100 });
   const [duration, setDuration] = useState(0);
   const [audioConfig, setAudioConfig] = useState({ volume: 100, muted: false, selectedMusic: null as Track | null });
-  const [exportSettings, setExportSettings] = useState({ quality: 80, format: mediaType === 'video' ? 'mp4' : 'jpg' });
+  const [exportSettings, setExportSettings] = useState({ 
+    quality: 80, 
+    format: mediaType === 'video' ? 'mp4' : 'jpg',
+    fileName: 'Untitled_Export'
+  });
   const [isProcessing, setIsProcessing] = useState(false);
   const [message, setMessage] = useState('Initializing Studio...');
   
@@ -91,6 +95,10 @@ export default function CustomEditor({
           coverUrl: ''
         } as any
       }));
+      // Auto-switch format to mp4 so audio doesn't get lost
+      if (mediaType === 'image') {
+        setExportSettings(prev => ({ ...prev, format: 'mp4' }));
+      }
     }
     if (e.target) e.target.value = '';
   };
@@ -135,15 +143,20 @@ export default function CustomEditor({
       if (!ffmpegRef.current.loaded) {
         const response = await fetch(initialMediaUrl);
         const blob = await response.blob();
-        onSave(blob, blob.type);
+        onSave(blob, blob.type, audioConfig.selectedMusic?.title, exportSettings.fileName);
         return;
       }
 
       const ffmpeg = ffmpegRef.current;
       setMessage('Preparing workspace...');
 
+      // **CRITICAL FIX:** Force output extension to mp4 if music is attached
+      let outputExt = exportSettings.format;
+      if (audioConfig.selectedMusic && mediaType === 'image' && ['jpg', 'png', 'webp'].includes(outputExt)) {
+        outputExt = 'mp4'; 
+      }
+
       const inputExt = mediaType === 'video' ? 'mp4' : 'jpg';
-      const outputExt = exportSettings.format;
       const inputMediaName = `input.${inputExt}`;
       const outputName = `output.${outputExt}`;
 
@@ -257,7 +270,7 @@ export default function CustomEditor({
         if (audioConfig.selectedMusic) {
           execArgs.push('-map', '0:v:0', '-map', '1:a:0', '-c:a', outputExt === 'webm' ? 'libvorbis' : 'aac');
           if (afStr) execArgs.push('-af', afStr);
-          execArgs.push('-shortest');
+          // Removed -shortest here so the video doesn't end abruptly if the audio is shorter
         } else {
           if (afStr) execArgs.push('-c:a', outputExt === 'webm' ? 'libvorbis' : 'aac', '-af', afStr);
           else execArgs.push('-c:a', 'copy');
@@ -278,12 +291,17 @@ export default function CustomEditor({
       if (outputExt === 'webp') mime = 'image/webp';
       
       const blob = new Blob([(data as Uint8Array).buffer], { type: mime });
-      onSave(blob, mime, audioConfig.selectedMusic?.title);
+      
+      // Ensure the file extension is correctly appended
+      const rawFileName = exportSettings.fileName.trim() || 'Untitled_Export';
+      const finalFileName = rawFileName.endsWith(`.${outputExt}`) ? rawFileName : `${rawFileName}.${outputExt}`;
+
+      onSave(blob, mime, audioConfig.selectedMusic?.title, finalFileName);
     } catch (err) {
       console.error(err);
       const response = await fetch(initialMediaUrl);
       const blob = await response.blob();
-      onSave(blob, blob.type);
+      onSave(blob, blob.type, audioConfig.selectedMusic?.title, exportSettings.fileName);
     } finally {
       setIsProcessing(false);
     }
@@ -638,7 +656,13 @@ export default function CustomEditor({
                     </div>
                   ) : (
                     <div className="mt-4">
-                      <MusicPicker onSelect={(m) => setAudioConfig(prev => ({...prev, selectedMusic: m}))} selected={audioConfig.selectedMusic} />
+                      <MusicPicker onSelect={(m) => {
+                          setAudioConfig(prev => ({...prev, selectedMusic: m}));
+                          // Auto-switch to mp4 if music is picked
+                          if (m && mediaType === 'image') {
+                            setExportSettings(prev => ({ ...prev, format: 'mp4' }));
+                          }
+                      }} selected={audioConfig.selectedMusic} />
                     </div>
                   )}
                 </div>
@@ -647,6 +671,25 @@ export default function CustomEditor({
 
             {activeTab === 'export' && (
               <div className="space-y-10">
+                <div className="space-y-4">
+                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest block mb-4">File Name</span>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <Type className="h-5 w-5 text-zinc-500" />
+                    </div>
+                    <input
+                      type="text"
+                      value={exportSettings.fileName}
+                      onChange={(e) => setExportSettings(prev => ({ ...prev, fileName: e.target.value }))}
+                      className="w-full bg-zinc-900/50 border border-zinc-800 focus:border-indigo-500 rounded-2xl pl-11 pr-4 py-4 text-sm text-white focus:outline-none transition-colors font-medium placeholder:text-zinc-600"
+                      placeholder="Enter file name..."
+                    />
+                    <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                      <span className="text-zinc-500 text-xs font-bold uppercase">.{exportSettings.format}</span>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="space-y-4">
                   <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest block mb-4">Export Format</span>
                   <div className="grid grid-cols-2 gap-4">
