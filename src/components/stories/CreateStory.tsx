@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
 import { addHours } from "date-fns";
-import CESDKEditor from "@/components/editor/CESDKEditor";
+import CustomEditor from "@/components/editor/CustomEditor";
 
 interface CreateStoryProps {
   onClose: () => void;
@@ -21,8 +21,8 @@ export default function CreateStory({ onClose, onCreated }: CreateStoryProps) {
   const [caption, setCaption] = useState("");
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  const [showCESDKEditor, setShowCESDKEditor] = useState(false);
-  // Edited blob from CE.SDK (overrides original file)
+  const [showCustomEditor, setShowCustomEditor] = useState(false);
+  // Edited blob from CustomEditor (overrides original file)
   const [editedBlob, setEditedBlob] = useState<Blob | null>(null);
   const [editedMimeType, setEditedMimeType] = useState<string>("image/png");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -55,7 +55,7 @@ export default function CreateStory({ onClose, onCreated }: CreateStoryProps) {
     setPreviewUrl(url);
     
     // Automatically open the editor
-    setShowCESDKEditor(true);
+    setShowCustomEditor(true);
   }, []);
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,7 +96,7 @@ export default function CreateStory({ onClose, onCreated }: CreateStoryProps) {
       setMediaType("image");
     }
 
-    setShowCESDKEditor(false);
+    setShowCustomEditor(false);
 
     toast({
       title: "Edit applied ✨",
@@ -177,12 +177,12 @@ export default function CreateStory({ onClose, onCreated }: CreateStoryProps) {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // Show CE.SDK editor full-screen
-  if (showCESDKEditor) {
+  // Show CustomEditor full-screen
+  if (showCustomEditor) {
     return (
-      <CESDKEditor
+      <CustomEditor
         onSave={handleEditorSave}
-        onClose={() => setShowCESDKEditor(false)}
+        onClose={() => setShowCustomEditor(false)}
         initialMediaUrl={previewUrl || undefined}
         mediaType={mediaType}
         title={mediaType === "video" ? "Edit Video Story" : "Edit Image Story"}
@@ -297,9 +297,9 @@ export default function CreateStory({ onClose, onCreated }: CreateStoryProps) {
                 </span>
               </div>
 
-              {/* Edit with CE.SDK button — for BOTH images and videos */}
+              {/* Edit with CustomEditor button — for BOTH images and videos */}
               <button
-                onClick={() => setShowCESDKEditor(true)}
+                onClick={() => setShowCustomEditor(true)}
                 disabled={uploading}
                 className="absolute bottom-2 right-2 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-lg transition-all z-10"
               >

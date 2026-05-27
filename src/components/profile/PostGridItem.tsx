@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Play, Wand2 } from "lucide-react";
-import CESDKEditor from "@/components/editor/CESDKEditor";
+import CustomEditor from "@/components/editor/CustomEditor";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/components/ui/use-toast";
@@ -24,7 +24,7 @@ const PostGridItem = ({ post, onClick, isOwner = false }: PostGridItemProps) => 
   const mediaType: "image" | "video" =
     post.media_type === "video" ? "video" : "image";
 
-  // Called when CE.SDK exports edited media — upload to Supabase and update post
+  // Called when CustomEditor exports edited media — upload to Supabase and update post
   const handleEditorSave = async (blob: Blob, mimeType: string) => {
     if (!user || !post.id) return;
     setShowEditor(false);
@@ -78,10 +78,10 @@ const PostGridItem = ({ post, onClick, isOwner = false }: PostGridItemProps) => 
     }
   };
 
-  // Render CE.SDK editor full-screen
+  // Render CustomEditor full-screen
   if (showEditor) {
     return (
-      <CESDKEditor
+      <CustomEditor
         onSave={handleEditorSave}
         onClose={() => setShowEditor(false)}
         initialMediaUrl={thumb || undefined}
@@ -142,7 +142,7 @@ const PostGridItem = ({ post, onClick, isOwner = false }: PostGridItemProps) => 
         </div>
       </div>
 
-      {/* Edit with CE.SDK button — only for owner */}
+      {/* Edit with CustomEditor button — only for owner */}
       {isOwner && (
         <button
           onClick={(e) => {
@@ -151,7 +151,7 @@ const PostGridItem = ({ post, onClick, isOwner = false }: PostGridItemProps) => 
           }}
           disabled={isUploading}
           className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-1 px-2 py-1 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-[10px] font-bold shadow-lg z-10"
-          title="Edit post with CE.SDK editor"
+          title="Edit post with Custom editor"
         >
           <Wand2 className="w-3 h-3" />
           {isUploading ? "Saving..." : "Edit"}
