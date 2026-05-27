@@ -19,7 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import CustomEditor from "@/components/editor/CustomEditor";
+import FilerobotEditor from "@/components/editor/FilerobotEditor";
 import CreateStory from "@/components/stories/CreateStory";
 import MusicPicker from "@/components/shared/MusicPicker";
 import { Track } from "@/lib/music";
@@ -231,15 +231,15 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
   };
 
   if (showCustomEditor && (selectedFiles.length > 0 || editedBlob)) {
-    const currentMediaUrl = primaryPreviewUrl || undefined;
-    const currentMediaType = isVideo ? "video" : "image";
+    const editUrl = editedBlob 
+      ? URL.createObjectURL(editedBlob) 
+      : previewUrls[0];
+      
     return (
-      <CustomEditor
-        onSave={handleEditorSave}
+      <FilerobotEditor
+        initialMediaUrl={editUrl}
         onClose={() => setShowCustomEditor(false)}
-        initialMediaUrl={currentMediaUrl}
-        mediaType={currentMediaType}
-        title={isVideo ? "Edit Video Post" : "Edit Photo Post"}
+        onSave={handleEditorSave}
       />
     );
   }
