@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import React, { useState, useRef } from "react";
 import {
   X,
   Image as ImageIcon,
@@ -19,7 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import FilerobotEditor from "@/components/editor/FilerobotEditor";
+import CustomEditor from "@/components/editor/CustomEditor";
 import CreateStory from "@/components/stories/CreateStory";
 import MusicPicker from "@/components/shared/MusicPicker";
 import { Track } from "@/lib/music";
@@ -35,12 +35,13 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
 
   const [mode, setMode] = useState<"select" | "post" | "story">("select");
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
-  const [showEditor, setShowEditor] = useState(false);
+  const [showCustomEditor, setShowCustomEditor] = useState(false);
 
   // Post Creation States
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [editedBlob, setEditedBlob] = useState<Blob | null>(null);
   const [editedMimeType, setEditedMimeType] = useState<string>("image/png");
+  const [customExportFileName, setCustomExportFileName] = useState<string>("");
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [caption, setCaption] = useState("");
@@ -83,6 +84,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
     setMode("select");
     setSelectedFiles([]);
     setEditedBlob(null);
+    setCustomExportFileName("");
     revokeAllUrls(previewUrls);
     setPreviewUrls([]);
     setCurrentSlide(0);
@@ -93,7 +95,7 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
     setMusicTitle("");
     setSelectedMusic(null);
     setShowAdvanced(false);
-    setShowEditor(false);
+    setShowCustomEditor(false);
     onClose();
   };
 
@@ -104,31 +106,31 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
     const arr = Array.from(files);
     setSelectedFiles(arr);
     setEditedBlob(null);
+    setCustomExportFileName("");
     setCurrentSlide(0);
 
     revokeAllUrls(previewUrls);
     const urls = arr.map((f) => URL.createObjectURL(f));
     setPreviewUrls(urls);
 
-    // Only auto-open editor for single file
     if (arr.length === 1) {
-      setShowEditor(true);
+      setShowCustomEditor(true);
     }
   };
 
-  const handleEditorSave = (blob: Blob, mimeType: string, selectedMusicTitle?: string) => {
+  const handleEditorSave = (blob: Blob, mimeType: string, selectedMusicTitle?: string, exportedFileName?: string) => {
     setEditedBlob(blob);
     setEditedMimeType(mimeType);
-    if (selectedMusicTitle) {
-      setMusicTitle(selectedMusicTitle);
-    }
+    
+    if (selectedMusicTitle) setMusicTitle(selectedMusicTitle);
+    if (exportedFileName) setCustomExportFileName(exportedFileName);
 
     revokeAllUrls(previewUrls);
     const newUrl = URL.createObjectURL(blob);
     setPreviewUrls([newUrl]);
     setCurrentSlide(0);
 
-    setShowEditor(false);
+    setShowCustomEditor(false);
     toast({ title: "Edit applied ✨", description: "Your media is ready to share." });
   };
 
@@ -159,9 +161,9 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
     setUploading(true);
     try {
       if (editedBlob) {
-        // Single edited file
+        // Use custom Export File Name if provided, fallback to original name
         const mimeType = editedMimeType;
-        const fileName = selectedFiles[0]?.name || "post-media";
+        const fileName = customExportFileName || selectedFiles[0]?.name || "post-media";
         const isVid = mimeType.startsWith("video/");
         const url = await uploadFileToStorage(editedBlob, fileName, mimeType);
 
@@ -178,7 +180,6 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
           music_url: selectedMusic?.id || null,
         });
       } else if (selectedFiles.length === 1) {
-        // Single unedited file
         const file = selectedFiles[0];
         const isVid = file.type.startsWith("video/");
         const url = await uploadFileToStorage(file, file.name, file.type);
@@ -196,7 +197,6 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
           music_url: selectedMusic?.id || null,
         });
       } else {
-        // Multiple files — upload all as carousel post
         const urls: string[] = [];
         for (const file of selectedFiles) {
           const url = await uploadFileToStorage(file, file.name, file.type);
@@ -230,26 +230,26 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
     }
   };
 
-  // If showing Filerobot editor, render it full-screen
-  if (showEditor && (selectedFiles.length > 0 || editedBlob)) {
+  if (showCustomEditor && (selectedFiles.length > 0 || editedBlob)) {
+    const currentMediaUrl = primaryPreviewUrl || undefined;
+    const currentMediaType = isVideo ? "video" : "image";
     return (
-      <FilerobotEditor
-        initialMediaUrl={previewUrls[0]}
-        onClose={() => setShowEditor(false)}
+      <CustomEditor
         onSave={handleEditorSave}
-        title="Image Editor"
+        onClose={() => setShowCustomEditor(false)}
+        initialMediaUrl={currentMediaUrl}
+        mediaType={currentMediaType}
+        title={isVideo ? "Edit Video Post" : "Edit Photo Post"}
       />
     );
   }
 
-  // If in Story mode, render the story creation modal
   if (mode === "story") {
     return <CreateStory onClose={handleClose} onCreated={handleClose} />;
   }
 
   return (
     <>
-      {/* Backdrop */}
       <div
         className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
         onClick={handleOutsideClick}
@@ -320,10 +320,8 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                 </div>
               ) : (
                 <div className="flex flex-col sm:flex-row h-full max-h-[520px]">
-                  {/* Media preview — Carousel or Single */}
                   <div className="flex-1 bg-black flex items-center justify-center relative overflow-hidden aspect-square sm:aspect-auto">
                     {isMultipleImages ? (
-                      /* Carousel for multiple images */
                       <>
                         <div className="w-full h-full relative">
                           <img
@@ -331,11 +329,9 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                             alt={`Preview ${currentSlide + 1}`}
                             className="w-full h-full object-cover"
                           />
-                          {/* Slide counter */}
                           <div className="absolute top-3 right-3 bg-black/60 text-white text-xs font-bold px-2 py-1 rounded-full backdrop-blur-sm">
                             {currentSlide + 1}/{previewUrls.length}
                           </div>
-                          {/* Dot indicators */}
                           <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
                             {previewUrls.map((_, idx) => (
                               <button
@@ -345,7 +341,6 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                               />
                             ))}
                           </div>
-                          {/* Left arrow */}
                           {currentSlide > 0 && (
                             <button
                               onClick={() => setCurrentSlide((s) => s - 1)}
@@ -354,7 +349,6 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                               <ChevronLeft className="w-5 h-5" />
                             </button>
                           )}
-                          {/* Right arrow */}
                           {currentSlide < previewUrls.length - 1 && (
                             <button
                               onClick={() => setCurrentSlide((s) => s + 1)}
@@ -381,19 +375,15 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                           />
                         )}
 
-                        {/* Edit button — only for single image file */}
-                        {(!selectedFiles[0]?.type.startsWith("video/")) && (
-                          <button
-                            onClick={() => setShowEditor(true)}
-                            disabled={uploading}
-                            className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-xl transition-all z-10"
-                          >
-                            <Wand2 className="w-3.5 h-3.5" />
-                            Edit Image
-                          </button>
-                        )}
+                        <button
+                          onClick={() => setShowCustomEditor(true)}
+                          disabled={uploading}
+                          className="absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold shadow-xl transition-all z-10"
+                        >
+                          <Wand2 className="w-3.5 h-3.5" />
+                          Edit with Studio
+                        </button>
 
-                        {/* Edited badge */}
                         {editedBlob && (
                           <div className="absolute top-2 left-2 z-10">
                             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-600/90 text-white">
@@ -405,7 +395,6 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                     ) : null}
                   </div>
 
-                  {/* Caption & settings sidebar */}
                   <div className="w-full sm:w-[340px] border-l border-border/50 flex flex-col bg-card overflow-y-auto scrollbar-thin max-h-[520px]">
                     <div className="p-4 border-b border-border/50 shrink-0">
                       <textarea
@@ -416,7 +405,6 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                       />
                     </div>
 
-                    {/* Music title input */}
                     <div className="p-4 border-b border-border/50 shrink-0">
                       <MusicPicker 
                         selected={selectedMusic} 
@@ -447,7 +435,6 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                       </button>
                       {showAdvanced && (
                         <div className="p-4 pt-0 space-y-5 bg-secondary/10">
-                          {/* Hide Likes */}
                           <div className="flex items-center justify-between">
                             <div className="flex flex-col max-w-[80%]">
                               <span className="text-sm font-semibold text-foreground">
@@ -462,7 +449,6 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                               onCheckedChange={setHideLikes}
                             />
                           </div>
-                          {/* Turn Off Commenting */}
                           <div className="flex items-center justify-between">
                             <div className="flex flex-col max-w-[80%]">
                               <span className="text-sm font-semibold text-foreground">
@@ -477,7 +463,6 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
                               onCheckedChange={setTurnOffCommenting}
                             />
                           </div>
-                          {/* Alt Text */}
                           <div className="space-y-2">
                             <span className="text-sm font-semibold text-foreground">
                               Accessibility
@@ -518,7 +503,6 @@ const GlobalCreateModal = ({ isOpen, onClose }: GlobalCreateModalProps) => {
           )}
         </div>
 
-        {/* ── Discard Confirmation Dialog ── */}
         {showDiscardConfirm && (
           <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
             <div className="bg-card rounded-2xl shadow-2xl overflow-hidden w-[90%] max-w-[340px] animate-scale-in border border-border/30">
